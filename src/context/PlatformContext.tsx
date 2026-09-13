@@ -517,10 +517,16 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   // 12. Notifications & Audit Logs
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+  const [allNotifications, setAllNotifications] = useState<NotificationItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
     return saved ? JSON.parse(saved) : [];
   });
+
+  const notifications: NotificationItem[] = useMemo(() => {
+    if (isAdmin) return allNotifications;
+    if (!currentUserId) return [];
+    return allNotifications.filter((n) => n.user_id === currentUserId || n.user_id === 'broadcast');
+  }, [allNotifications, currentUserId, isAdmin]);
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
@@ -590,8 +596,8 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [tickets]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
-  }, [notifications]);
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(allNotifications));
+  }, [allNotifications]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
@@ -611,10 +617,10 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAuditLogs((prev) => [newEntry, ...prev]);
   };
 
-  const addNotification = (title: string, message: string, type: NotificationItem['type'], action_url?: string) => {
+  const addNotification = (title: string, message: string, type: NotificationItem['type'], action_url?: string, targetUserId?: string) => {
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
-      user_id: currentUserId || 'system',
+      user_id: targetUserId || currentUserId || 'system',
       title,
       message,
       type,
@@ -622,7 +628,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       action_url,
       created_at: new Date().toISOString(),
     };
-    setNotifications((prev) => [newNotif, ...prev]);
+    setAllNotifications((prev) => [newNotif, ...prev]);
   };
 
   // Plan actions
@@ -910,7 +916,8 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       'Plan Activated!',
       `Your ${selectedPlan.name} has been verified and activated. You can now access ${selectedPlan.daily_task_limit} daily tasks on the Earn page!`,
       'membership',
-      '/earn'
+      '/earn',
+      payment.user_id
     );
 
     logAuditEvent('payment_approved', 'payments', paymentId, {
@@ -950,10 +957,13 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       )
     );
 
+    const paymentToReject = allPayments.find(p => p.id === paymentId);
     addNotification(
       'Payment Verification Failed',
       `Payment was rejected: ${reason}. Please check your transaction reference.`,
-      'payment'
+      'payment',
+      undefined,
+      paymentToReject?.user_id
     );
 
     logAuditEvent('payment_rejected', 'payments', paymentId, { reason });
@@ -1572,7 +1582,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Notifications
   const markNotificationRead = (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    setAllNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
   };
 
   // Demo toggle helper (Operates on current authenticated user)

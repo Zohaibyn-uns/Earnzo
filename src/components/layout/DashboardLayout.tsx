@@ -24,7 +24,7 @@ import { Badge } from '../ui/Badge';
 import { DisplayAdUnit } from '../ads/DisplayAdUnit';
 
 export const DashboardLayout: React.FC = () => {
-  const { user, logout, switchRole } = useAuth();
+  const { user, logout, switchRole, isAdmin } = useAuth();
   const { wallet, membership, activePlan, hasActivePlan, notifications, markNotificationRead } = usePlatform();
   const location = useLocation();
   const navigate = useNavigate();
@@ -128,16 +128,17 @@ export const DashboardLayout: React.FC = () => {
               )}
             </div>
 
-            {/* Quick Demo Switcher */}
-            <button
-              onClick={() => {
-                switchRole('admin');
-                navigate('/admin');
-              }}
-              className="hidden sm:inline-flex text-xs px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium transition-colors"
-            >
-              Switch to Admin
-            </button>
+            {/* Quick Switcher for Admins only */}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  navigate('/admin');
+                }}
+                className="hidden sm:inline-flex text-xs px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium transition-colors"
+              >
+                Go to Admin HQ
+              </button>
+            )}
 
             {/* User Profile Pill */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
