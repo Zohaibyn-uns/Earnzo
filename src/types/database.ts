@@ -263,6 +263,7 @@ export interface SystemSettings {
   minWithdrawalBalance: number;
   requiredQualifiedReferrals: number;
   referralCommissionPct: number;
+  maintenanceMode?: boolean;
   jazzcashTitle: string;
   jazzcashNumber: string;
   easypaisaTitle: string;

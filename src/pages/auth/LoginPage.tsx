@@ -36,13 +36,13 @@ export const LoginPage: React.FC = () => {
 
   const handleDemoLogin = (type: 'user' | 'admin') => {
     if (type === 'admin') {
-      setEmail('admin@watchearn.com');
+      setEmail('admin@earnzo.com');
       setPassword('AdminPass123!');
-      login('admin@watchearn.com').then(() => navigate('/admin'));
+      login('admin@earnzo.com').then(() => navigate('/admin'));
     } else {
-      setEmail('user@watchearn.com');
+      setEmail('user@earnzo.com');
       setPassword('UserPass123!');
-      login('user@watchearn.com').then(() => navigate('/dashboard'));
+      login('user@earnzo.com').then(() => navigate('/dashboard'));
     }
   };
 
@@ -55,7 +55,7 @@ export const LoginPage: React.FC = () => {
               <PlayCircle className="w-6 h-6 fill-white/20 stroke-white" />
             </div>
             <span className="text-2xl font-black text-slate-900 tracking-tight">
-              Watch<span className="text-indigo-600">Earn</span>
+              Earn<span className="text-indigo-600">zo</span>
             </span>
           </Link>
           <h2 className="text-2xl font-bold text-slate-900">Sign in to your account</h2>

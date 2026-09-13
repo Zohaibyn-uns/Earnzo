@@ -95,7 +95,7 @@ export const Navbar: React.FC = () => {
           </div>
           <div className="flex flex-col">
             <span className="text-xl font-extrabold tracking-tight text-slate-900">
-              Watch<span className="text-indigo-600">Earn</span>
+              Earn<span className="text-indigo-600">zo</span>
             </span>
             <span className="text-[10px] font-semibold text-slate-400 tracking-wider -mt-1 uppercase">
               Sponsored Video Hub

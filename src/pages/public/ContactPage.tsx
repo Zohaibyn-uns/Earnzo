@@ -21,7 +21,7 @@ export const ContactPage: React.FC = () => {
           Support & Communications
         </Badge>
         <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
-          Get In Touch With WatchEarn
+          Get In Touch With Earnzo
         </h1>
         <p className="text-base text-slate-600">
           Have an inquiry about video campaigns, membership verification, or payout processing? Our compliance team is here to assist.
@@ -40,7 +40,7 @@ export const ContactPage: React.FC = () => {
                   <Mail className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold block text-slate-900">Email Desk</span>
-                    <span>support@watchearn.com</span>
+                    <span>support@earnzo.com</span>
                   </div>
                 </div>
 

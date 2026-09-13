@@ -231,7 +231,7 @@ export const PlansPage: React.FC = () => {
           <span>Transparent Platform Access Terms</span>
         </div>
         <p className="text-xs text-slate-300 leading-relaxed">
-          WatchEarn is an authentic sponsored video advertising hub. Membership fees cover identity screening, cryptographic playback telemetry, and access to sponsored task pools. We make zero claims of guaranteed investment dividends or fixed interest returns.
+          Earnzo is an authentic sponsored video advertising hub. Membership fees cover identity screening, cryptographic playback telemetry, and access to sponsored task pools. We make zero claims of guaranteed investment dividends or fixed interest returns.
         </p>
       </div>
 
@@ -323,7 +323,7 @@ export const PlansPage: React.FC = () => {
                   <div className="font-mono font-bold text-slate-900 text-[10px] truncate">
                     {settings.bankIban}
                   </div>
-                  <div className="text-[10px] text-slate-500 truncate">WatchEarn Technologies</div>
+                  <div className="text-[10px] text-slate-500 truncate">Earnzo Technologies</div>
                 </div>
               </div>
             </div>

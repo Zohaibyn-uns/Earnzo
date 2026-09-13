@@ -8,13 +8,13 @@ export const AboutPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
       <div className="text-center max-w-3xl mx-auto space-y-4">
         <Badge variant="primary" size="md">
-          About WatchEarn
+          About Earnzo
         </Badge>
         <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
           Pioneering Authentic Digital Video Engagement
         </h1>
         <p className="text-base text-slate-600 leading-relaxed">
-          WatchEarn was founded on a simple principle: advertisers deserve real human attention, and viewers deserve direct, transparent compensation for their time.
+          Earnzo was founded on a simple principle: advertisers deserve real human attention, and viewers deserve direct, transparent compensation for their time.
         </p>
       </div>
 

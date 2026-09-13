@@ -14,7 +14,7 @@ export const Footer: React.FC = () => {
                 <PlayCircle className="w-5 h-5 fill-white/20 stroke-white" />
               </div>
               <span className="text-xl font-bold text-white tracking-tight">
-                Watch<span className="text-indigo-400">Earn</span>
+                Earn<span className="text-indigo-400">zo</span>
               </span>
             </div>
             <p className="text-slate-400 leading-relaxed max-w-sm text-xs sm:text-sm">
@@ -27,7 +27,7 @@ export const Footer: React.FC = () => {
                 <span>Legitimate Business Model</span>
               </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                WatchEarn is NOT an investment scheme. We offer zero guaranteed passive returns. Rewards are strictly funded by verified advertiser marketing budgets.
+                Earnzo is NOT an investment scheme. We offer zero guaranteed passive returns. Rewards are strictly funded by verified advertiser marketing budgets.
               </p>
             </div>
           </div>
@@ -37,7 +37,7 @@ export const Footer: React.FC = () => {
             <h4 className="text-white font-semibold text-sm tracking-wider uppercase">Platform</h4>
             <ul className="space-y-2 text-xs">
               <li><Link to="/how-it-works" className="hover:text-white transition-colors">How It Works</Link></li>
-              <li><Link to="/plans" className="hover:text-white transition-colors">Rs. 300 Membership</Link></li>
+              <li><Link to="/plans" className="hover:text-white transition-colors">VIP Membership Plans</Link></li>
               <li><Link to="/faq" className="hover:text-white transition-colors">Frequently Asked Questions</Link></li>
               <li><Link to="/dashboard/videos" className="hover:text-white transition-colors">Sponsored Tasks</Link></li>
               <li><Link to="/dashboard/wallet" className="hover:text-white transition-colors">Ledger Wallet</Link></li>
@@ -62,7 +62,7 @@ export const Footer: React.FC = () => {
             <ul className="space-y-2.5 text-xs text-slate-400">
               <li className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>support@watchearn.com</span>
+                <span>support@earnzo.com</span>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -85,7 +85,7 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="mt-12 pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-          <p>© {new Date().getFullYear()} WatchEarn Technologies Pvt Ltd. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Earnzo Technologies Pvt Ltd. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <span>Server Time: UTC+05:00 (PKT)</span>
             <span>Ledger Integrity Engine: Active</span>

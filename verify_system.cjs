@@ -550,6 +550,97 @@ test('Test 15: Plan Stays Inactive While Payment Is Pending Verification', () =>
   assert.strictEqual(activeMem.status, 'active');
 });
 
+// -------------------------------------------------------------
+// TEST 16: Consolidated Production Migration File Integrity
+// -------------------------------------------------------------
+test('Test 16: Consolidated Production Migration Schema Integrity', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const migrationPath = path.join(__dirname, 'supabase', 'migrations', '20260913000001_earnzo_complete_production.sql');
+
+  assert.ok(fs.existsSync(migrationPath), 'Consolidated migration file must exist');
+  const content = fs.readFileSync(migrationPath, 'utf8');
+
+  // Verify all essential tables exist in schema
+  const requiredTables = [
+    'profiles', 'plans', 'memberships', 'payments', 'video_campaigns',
+    'videos', 'video_watch_sessions', 'wallet_accounts', 'wallet_transactions',
+    'withdrawals', 'referrals', 'referral_rewards', 'ad_placements',
+    'announcements', 'support_tickets', 'support_ticket_messages', 'notifications',
+    'audit_logs', 'settings'
+  ];
+
+  for (const table of requiredTables) {
+    assert.ok(content.includes(`CREATE TABLE IF NOT EXISTS public.${table}`), `Must contain table: ${table}`);
+  }
+
+  // Verify essential RPC stored procedures
+  const requiredProcedures = [
+    'rpc_start_watch_session',
+    'rpc_complete_watch_session',
+    'rpc_verify_payment',
+    'rpc_request_withdrawal',
+    'rpc_process_withdrawal'
+  ];
+
+  for (const proc of requiredProcedures) {
+    assert.ok(content.includes(`CREATE OR REPLACE FUNCTION public.${proc}`), `Must contain procedure: ${proc}`);
+  }
+
+  // Verify auth trigger
+  assert.ok(content.includes('CREATE TRIGGER on_auth_user_created'), 'Must include auth trigger for clean profiles');
+});
+
+// -------------------------------------------------------------
+// TEST 17: Plan Upgrade Difference Pricing & Downgrade Policy
+// -------------------------------------------------------------
+test('Test 17: Plan Upgrade Difference Pricing & Downgrade Policy', () => {
+  const plans = [
+    { id: 'plan-1', name: 'Plan 1', price: 300 },
+    { id: 'plan-2', name: 'Plan 2', price: 500 },
+    { id: 'plan-3', name: 'Plan 3', price: 950 },
+  ];
+
+  function calculateAction(currentPlan, targetPlan) {
+    if (!currentPlan) {
+      return { action: 'purchase', amountToPay: targetPlan.price };
+    }
+    if (currentPlan.id === targetPlan.id) {
+      return { action: 'renew', amountToPay: targetPlan.price };
+    }
+    if (targetPlan.price > currentPlan.price) {
+      // Upgrade: Pay difference
+      return {
+        action: 'upgrade',
+        amountToPay: targetPlan.price - currentPlan.price,
+      };
+    }
+    // Downgrade: Takes effect on renewal
+    return {
+      action: 'downgrade',
+      amountToPay: targetPlan.price,
+      note: 'Takes effect upon current plan expiration',
+    };
+  }
+
+  // Fresh user -> Plan 1 = Rs. 300
+  assert.deepStrictEqual(calculateAction(null, plans[0]), { action: 'purchase', amountToPay: 300 });
+
+  // Plan 1 -> Plan 2 upgrade = 500 - 300 = Rs. 200
+  assert.deepStrictEqual(calculateAction(plans[0], plans[1]), { action: 'upgrade', amountToPay: 200 });
+
+  // Plan 1 -> Plan 3 upgrade = 950 - 300 = Rs. 650
+  assert.deepStrictEqual(calculateAction(plans[0], plans[2]), { action: 'upgrade', amountToPay: 650 });
+
+  // Plan 2 -> Plan 3 upgrade = 950 - 500 = Rs. 450
+  assert.deepStrictEqual(calculateAction(plans[1], plans[2]), { action: 'upgrade', amountToPay: 450 });
+
+  // Plan 3 -> Plan 1 downgrade = takes effect on renewal
+  const downgradeResult = calculateAction(plans[2], plans[0]);
+  assert.strictEqual(downgradeResult.action, 'downgrade');
+  assert.strictEqual(downgradeResult.amountToPay, 300);
+});
+
 console.log(`\nResults: ${passedTests} of ${totalTests} test suites passed.`);
 if (passedTests === totalTests) {
   console.log('STATUS: ALL INTEGRATION & LEDGER SECURITY TESTS PASSED PERFECTLY!\n');

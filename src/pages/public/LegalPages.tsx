@@ -38,21 +38,21 @@ export const LegalPages: React.FC = () => {
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-900 leading-relaxed">
-                  <strong>NON-INVESTMENT REGULATORY DECLARATION:</strong> WatchEarn is strictly a reward-based sponsored video marketing platform. We do not provide financial investment advisory services, capital asset trading, or guaranteed returns on any purchases. The Rs. 300 membership is an access and identity verification fee, NOT a financial deposit.
+                  <strong>NON-INVESTMENT REGULATORY DECLARATION:</strong> Earnzo is strictly a reward-based sponsored video marketing platform. We do not provide financial investment advisory services, capital asset trading, or guaranteed returns on any purchases. Membership fees cover access and identity verification, NOT a financial deposit.
                 </div>
               </div>
 
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">1. Acceptance of Terms</h3>
                 <p>
-                  By creating an account on WatchEarn, you affirm that you are at least 18 years old and agree to abide by all platform rules, security protocols, and operational terms.
+                  By creating an account on Earnzo, you affirm that you are at least 18 years old and agree to abide by all platform rules, security protocols, and operational terms.
                 </p>
               </section>
 
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">2. Advertising & Anti-Fraud Compliance</h3>
                 <p>
-                  WatchEarn adheres strictly to international advertising network guidelines:
+                  Earnzo adheres strictly to international advertising network guidelines:
                 </p>
                 <ul className="list-disc pl-5 space-y-1 text-xs">
                   <li>Users shall not generate artificial impressions or automated video plays via bots, crawlers, or emulation scripts.</li>
@@ -64,14 +64,14 @@ export const LegalPages: React.FC = () => {
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">3. Membership & Reward Distribution</h3>
                 <p>
-                  The Rs. 300 standard membership confers 30-day access to daily task allocations. Rewards are funded exclusively by verified campaign sponsors and are contingent upon authentic completion of video watch sessions.
+                  Membership plans confer 30-day access to daily task allocations. Rewards are funded exclusively by verified campaign sponsors and are contingent upon authentic completion of video watch sessions.
                 </p>
               </section>
 
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">4. Withdrawal Regulations</h3>
                 <p>
-                  Withdrawal requests are processed upon reaching the minimum threshold of Rs. 150. All requests are subject to audit logs, session verification, and identity cross-checks. Suspicious accounts may be suspended pending administrative review.
+                  Withdrawal requests are processed upon reaching the minimum threshold of Rs. 500 and having at least 2 qualified referrals who purchased an eligible plan. All requests are subject to audit logs, session verification, and identity cross-checks. Suspicious accounts may be suspended pending administrative review.
                 </p>
               </section>
             </>
@@ -82,7 +82,7 @@ export const LegalPages: React.FC = () => {
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">1. Information We Collect</h3>
                 <p>
-                  To prevent multi-accounting and bot fraud, WatchEarn collects:
+                  To prevent multi-accounting and bot fraud, Earnzo collects:
                 </p>
                 <ul className="list-disc pl-5 space-y-1 text-xs">
                   <li>Full legal name, email address, and mobile phone number.</li>
@@ -112,7 +112,7 @@ export const LegalPages: React.FC = () => {
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">1. Membership Fee Refund Terms</h3>
                 <p>
-                  The Rs. 300 membership fee covers immediate setup costs, identity screening, and server allocation.
+                  Membership fees cover immediate setup costs, identity screening, and server allocation.
                 </p>
                 <ul className="list-disc pl-5 space-y-1 text-xs">
                   <li>If your payment was submitted but your account was rejected or cannot be activated due to system error, a 100% refund is processed within 48 hours.</li>
@@ -124,7 +124,7 @@ export const LegalPages: React.FC = () => {
               <section className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">2. Requesting a Refund</h3>
                 <p>
-                  To request a refund for an unactivated membership, open a support ticket or email support@watchearn.com with your Transaction ID (TRX) and registered mobile number.
+                  To request a refund for an unactivated membership, open a support ticket or email support@earnzo.com with your Transaction ID (TRX) and registered mobile number.
                 </p>
               </section>
             </>

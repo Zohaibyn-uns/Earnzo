@@ -198,15 +198,15 @@ export const INITIAL_ADS: AdPlacement[] = [
 export const INITIAL_ANNOUNCEMENTS: Announcement[] = [
   {
     id: 'ann-01',
-    title: 'Welcome to WatchEarn Official Platform Launch!',
-    content: 'Welcome verified members. Watch verified promotional video campaigns from certified sponsors, receive platform rewards directly into your wallet, and request payouts seamlessly.',
+    title: 'Welcome to Earnzo Official Platform Launch!',
+    content: 'Earnzo has officially launched. Activate your membership to watch brand-sponsored videos and earn verified platform rewards.',
     category: 'general',
     is_pinned: true,
     is_active: true,
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
-    id: 'ann-02',
+    id: 'ann-002',
     title: 'JazzCash & Easypaisa Instant Settlement Update',
     content: 'All verified withdrawal requests submitted before 4:00 PM are reviewed and approved on the same banking day.',
     category: 'payout',
@@ -218,7 +218,7 @@ export const INITIAL_ANNOUNCEMENTS: Announcement[] = [
 
 export const DEFAULT_ADMIN_PROFILE: Profile = {
   id: 'admin-usr-001',
-  email: 'admin@watchearn.com',
+  email: 'admin@earnzo.com',
   full_name: 'Lead Compliance Administrator',
   phone: '03001234567',
   role: 'admin',
@@ -230,7 +230,7 @@ export const DEFAULT_ADMIN_PROFILE: Profile = {
 
 export const DEFAULT_USER_PROFILE: Profile = {
   id: 'user-usr-001',
-  email: 'user@watchearn.com',
+  email: 'user@earnzo.com',
   full_name: 'Ali Raza',
   phone: '03219876543',
   role: 'user',

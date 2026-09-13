@@ -33,9 +33,10 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   minWithdrawalBalance: 500,
   requiredQualifiedReferrals: 2,
   referralCommissionPct: 10,
-  jazzcashTitle: 'WatchEarn Official Operations',
+  maintenanceMode: false,
+  jazzcashTitle: 'Earnzo Official Operations',
   jazzcashNumber: '03001234567',
-  easypaisaTitle: 'WatchEarn Payments',
+  easypaisaTitle: 'Earnzo Payments',
   easypaisaNumber: '03451234567',
   bankIban: 'PK36MEZN0001234567890123',
 };
@@ -386,7 +387,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return [
       {
         id: 'aud-001',
-        actor_email: 'admin@watchearn.com',
+        actor_email: 'admin@earnzo.com',
         action: 'system_initialized',
         entity: 'platform',
         details: { note: 'Initial platform deployment with 3 VIP plans' },
@@ -491,7 +492,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const logAuditEvent = (action: string, entity: string, entityId?: string, details?: Record<string, any>) => {
     const newEntry: AuditLog = {
       id: `aud-${Date.now()}`,
-      actor_email: user?.email || 'admin@watchearn.com',
+      actor_email: user?.email || 'admin@earnzo.com',
       action,
       entity,
       entity_id: entityId,

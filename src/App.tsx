@@ -44,8 +44,36 @@ import { AdminAdvertisements } from './pages/admin/AdminAdvertisements';
 import { AdminAuditLogs } from './pages/admin/AdminAuditLogs';
 import { AdminSettings } from './pages/admin/AdminSettings';
 
+import { usePlatform } from './context/PlatformContext';
+import { AlertTriangle, Wrench } from 'lucide-react';
+
 // Public Shell
 const PublicLayout: React.FC = () => {
+  const { settings } = usePlatform();
+  const { isAdmin } = useAuth();
+
+  if (settings.maintenanceMode && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-6">
+        <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
+          <Wrench className="w-8 h-8" />
+        </div>
+        <div className="space-y-2 max-w-md">
+          <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold uppercase tracking-wider border border-amber-500/30">
+            Scheduled Maintenance
+          </span>
+          <h1 className="text-3xl font-black text-white">Earnzo is Upgrading</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            Our systems and payment settlement engines are undergoing scheduled performance maintenance. We will resume normal operations shortly.
+          </p>
+        </div>
+        <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-400">
+          Administrator bypass is enabled for authorized staff via <a href="/login" className="text-indigo-400 hover:underline">Staff Login</a>.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar />
@@ -59,7 +87,12 @@ const PublicLayout: React.FC = () => {
 
 // Route Guards
 const ProtectedRoute: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
+  const { settings } = usePlatform();
+
+  if (settings.maintenanceMode && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <DashboardLayout />;
 };

@@ -101,7 +101,7 @@ export const HomePage: React.FC = () => {
             Transparent Workflow
           </Badge>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            How WatchEarn Operates
+            How Earnzo Operates
           </h2>
           <p className="text-slate-600 text-sm mt-2">
             A sustainable, closed-loop advertising ecosystem built on verified engagement.
@@ -164,13 +164,13 @@ export const HomePage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <span className="text-amber-400 text-xs font-bold uppercase tracking-wider">
-              Single Transparent Plan
+              Transparent Membership Tiers
             </span>
             <h2 className="text-3xl font-extrabold text-white tracking-tight mt-1">
-              WatchEarn Membership
+              Earnzo VIP Plans
             </h2>
             <p className="text-slate-400 text-xs sm:text-sm mt-2">
-              All members operate under the identical fair-access model. No hidden VIP tiers or predatory upsells.
+              Fair-access VIP tiers designed for verified members. Choose your plan to unlock daily sponsored task pools.
             </p>
           </div>
 
@@ -407,9 +407,9 @@ export const HomePage: React.FC = () => {
         <div className="space-y-4">
           <Card>
             <CardContent className="p-5">
-              <h4 className="text-sm font-bold text-slate-900">Is WatchEarn an investment or cryptocurrency platform?</h4>
+              <h4 className="text-sm font-bold text-slate-900">Is Earnzo an investment or cryptocurrency platform?</h4>
               <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                Absolutely NOT. WatchEarn is an advertising and market-research engagement platform. The Rs. 300 fee covers member infrastructure, verification, and task dispatching for 30 days. No fixed or guaranteed returns are promised.
+                Absolutely NOT. Earnzo is an authentic advertising and market-research engagement platform. Membership fees cover identity verification, anti-cheat validation, and sponsored task access for 30 days. No fixed or guaranteed returns are promised.
               </p>
             </CardContent>
           </Card>

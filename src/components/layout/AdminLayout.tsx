@@ -94,7 +94,7 @@ export const AdminLayout: React.FC = () => {
               </div>
               <div className="flex flex-col">
                 <span className="text-base font-extrabold tracking-tight text-white">
-                  WatchEarn <span className="text-amber-400">HQ</span>
+                  Earnzo <span className="text-amber-400">HQ</span>
                 </span>
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider -mt-1">
                   Master Control Plane

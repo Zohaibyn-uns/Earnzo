@@ -70,7 +70,7 @@ export const RegisterPage: React.FC = () => {
               <PlayCircle className="w-6 h-6 fill-white/20 stroke-white" />
             </div>
             <span className="text-2xl font-black text-slate-900 tracking-tight">
-              Watch<span className="text-indigo-600">Earn</span>
+              Earn<span className="text-indigo-600">zo</span>
             </span>
           </Link>
           <h2 className="text-2xl font-bold text-slate-900">Create Verified Member Profile</h2>

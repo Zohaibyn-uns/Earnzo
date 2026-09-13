@@ -11,6 +11,7 @@ export const AdminSettings: React.FC = () => {
   const [minWithdrawalBalance, setMinWithdrawalBalance] = useState(settings.minWithdrawalBalance);
   const [requiredQualifiedReferrals, setRequiredQualifiedReferrals] = useState(settings.requiredQualifiedReferrals);
   const [referralCommissionPct, setReferralCommissionPct] = useState(settings.referralCommissionPct);
+  const [maintenanceMode, setMaintenanceMode] = useState(settings.maintenanceMode || false);
 
   const [jcTitle, setJcTitle] = useState(settings.jazzcashTitle);
   const [jcNumber, setJcNumber] = useState(settings.jazzcashNumber);
@@ -25,6 +26,7 @@ export const AdminSettings: React.FC = () => {
       minWithdrawalBalance: Number(minWithdrawalBalance),
       requiredQualifiedReferrals: Number(requiredQualifiedReferrals),
       referralCommissionPct: Number(referralCommissionPct),
+      maintenanceMode,
       jazzcashTitle: jcTitle,
       jazzcashNumber: jcNumber,
       easypaisaTitle: epTitle,
@@ -90,6 +92,27 @@ export const AdminSettings: React.FC = () => {
               helperText="Default: 10% direct 1-tier"
               className="bg-slate-900 border-slate-700 text-white"
             />
+          </div>
+
+          {/* Maintenance Mode Toggle */}
+          <div className="pt-2 border-t border-slate-900 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-white block">Platform Maintenance Mode</span>
+              <span className="text-[11px] text-slate-400">
+                When enabled, general visitors see a maintenance screen. Admins retain full bypass access.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMaintenanceMode(!maintenanceMode)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                maintenanceMode
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/30'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              {maintenanceMode ? 'ACTIVE (LOCKED)' : 'OFF (NORMAL)'}
+            </button>
           </div>
         </div>
 
