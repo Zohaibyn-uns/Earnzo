@@ -25,12 +25,26 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'watchearn_active_user_v3';
 
+export const isValidUUID = (id?: string | null): boolean => {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Profile | null>(() => {
     const saved = localStorage.getItem(AUTH_STORAGE_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // If live Supabase is configured, reject any non-UUID user from localStorage
+        if (isLiveSupabaseConfigured) {
+          if (parsed && isValidUUID(parsed.id)) {
+            return parsed;
+          }
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          return null;
+        }
+        return parsed;
       } catch (e) {
         console.error('Failed to parse saved user', e);
       }
@@ -39,9 +53,88 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
+  // Supabase Auth Session Synchronization
+  useEffect(() => {
+    if (!isLiveSupabaseConfigured) return;
+
+    // Purge any stale legacy demo user state
+    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed || !isValidUUID(parsed.id)) {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          setUser(null);
+        }
+      } catch (e) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    }
+
+    const syncUserFromSession = async (sessionUser: any) => {
+      if (!sessionUser || !isValidUUID(sessionUser.id)) {
+        setUser(null);
+        return;
+      }
+
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', sessionUser.id)
+          .maybeSingle();
+
+        if (profile) {
+          setUser(profile);
+        } else {
+          // Construct profile using real Supabase Auth UUID while DB trigger finalizes
+          setUser({
+            id: sessionUser.id,
+            email: sessionUser.email || '',
+            full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'Member',
+            phone: sessionUser.user_metadata?.phone || '',
+            role: (sessionUser.user_metadata?.role as any) || 'user',
+            status: 'active',
+            referral_code: sessionUser.user_metadata?.referral_code || '',
+            created_at: sessionUser.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load profile for Supabase user:', err);
+      }
+    };
+
+    // 1. Initial Session Check on app mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        syncUserFromSession(session.user);
+      }
+    });
+
+    // 2. Realtime Auth State Change Listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await syncUserFromSession(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     if (user) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      // In live Supabase mode, only persist if user has a valid UUID
+      if (isLiveSupabaseConfigured && !isValidUUID(user.id)) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      } else {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      }
     } else {
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
@@ -49,8 +142,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Login
   const login = async (email: string, _password?: string): Promise<{ success: boolean; error?: string }> => {
-    // If live Supabase is configured, use official SDK
-    if (isLiveSupabaseConfigured && _password) {
+    // If live Supabase is configured, use official SDK with zero mock fallback
+    if (isLiveSupabaseConfigured) {
+      if (!_password) {
+        return { success: false, error: 'Password is required to sign in.' };
+      }
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -58,19 +154,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         if (error) return { success: false, error: error.message };
         if (data.user) {
-          // fetch profile
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
           if (profile) {
             setUser(profile);
-            return { success: true };
+          } else {
+            setUser({
+              id: data.user.id,
+              email: data.user.email || email,
+              full_name: data.user.user_metadata?.full_name || email.split('@')[0],
+              phone: data.user.user_metadata?.phone || '',
+              role: (data.user.user_metadata?.role as any) || 'user',
+              status: 'active',
+              referral_code: data.user.user_metadata?.referral_code || '',
+              created_at: data.user.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
           }
+          return { success: true };
         }
       } catch (err: any) {
-        console.warn('Supabase live auth error, using fallback:', err.message);
+        return { success: false, error: err.message || 'Authentication failed' };
       }
     }
 
-    // Local / Sandbox Auth
+    // Local / Offline Sandbox Fallback only when Supabase is not configured
     if (email.toLowerCase().includes('admin')) {
       setUser(DEFAULT_ADMIN_PROFILE);
       return { success: true };
@@ -99,7 +206,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password?: string;
     referralCode?: string;
   }): Promise<{ success: boolean; error?: string }> => {
-    if (isLiveSupabaseConfigured && data.password) {
+    if (isLiveSupabaseConfigured) {
+      if (!data.password) {
+        return { success: false, error: 'Password is required to register.' };
+      }
       try {
         const { data: authData, error } = await supabase.auth.signUp({
           email: data.email,
@@ -115,25 +225,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) return { success: false, error: error.message };
         if (authData.user) {
           const newProfile: Profile = {
-            id: authData.user.id,
+            id: authData.user.id, // REAL Supabase Auth UUID!
             email: data.email,
             full_name: data.fullName,
             phone: data.phone,
             role: 'user',
             status: 'active',
-            referral_code: 'WE' + Math.random().toString(36).substring(2, 6).toUpperCase(),
-            created_at: new Date().toISOString(),
+            referral_code: data.referralCode || '',
+            created_at: authData.user.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
           setUser(newProfile);
           return { success: true };
         }
       } catch (err: any) {
-        console.warn('Supabase live signup error, using fallback:', err.message);
+        return { success: false, error: err.message || 'Registration failed' };
       }
     }
 
-    // Sandbox registration
+    // Offline Sandbox registration
     const newProfile: Profile = {
       id: `usr-${Date.now()}`,
       email: data.email,
@@ -154,10 +264,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isLiveSupabaseConfigured) {
       supabase.auth.signOut().catch(() => {});
     }
+    localStorage.removeItem(AUTH_STORAGE_KEY);
     setUser(null);
   };
 
   const switchRole = (role: 'user' | 'admin') => {
+    if (isLiveSupabaseConfigured) {
+      // In live Supabase mode, never inject fake IDs like 'user-usr-001'
+      if (user && isValidUUID(user.id)) {
+        setUser({ ...user, role });
+      }
+      return;
+    }
     if (role === 'admin') {
       setUser(DEFAULT_ADMIN_PROFILE);
     } else {

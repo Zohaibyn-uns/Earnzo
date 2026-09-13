@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { PlayCircle, Menu, X, ShieldCheck, ArrowRight, User, LogOut, LayoutDashboard, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlatform } from '../../context/PlatformContext';
+import { isLiveSupabaseConfigured } from '../../lib/supabase';
 import { Button } from '../ui/Button';
 
 export const Navbar: React.FC = () => {
@@ -49,42 +50,44 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
-      {/* Top Compliance Bar with demo state controls */}
+      {/* Top Compliance Bar */}
       <div className="bg-slate-900 text-slate-300 text-xs py-1 px-4 sm:px-8 text-center flex items-center justify-between">
-        <div className="hidden sm:flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>Regulated Reward-Based Sponsored Video Network • Not an Investment Platform</span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 ml-auto text-[11px]">
-          <span className="text-slate-400 hidden sm:inline">Demo Switcher:</span>
-          {/* Plan state toggle */}
-          <button
-            onClick={toggleDemoMembership}
-            className={`px-2 py-0.5 rounded font-semibold text-[10px] transition-colors ${
-              hasActivePlan ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-            title="Toggle Plan active/unsubscribed to test locked vs unlocked Earn states"
-          >
-            {hasActivePlan ? `Active: ${activePlan?.name}` : 'No Active Plan'}
-          </button>
-          {/* User vs Admin view toggle */}
-          <button
-            onClick={() => switchRole('user')}
-            className={`px-2 py-0.5 rounded font-medium ${
-              user?.role === 'user' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            User
-          </button>
-          <button
-            onClick={() => switchRole('admin')}
-            className={`px-2 py-0.5 rounded font-medium ${
-              user?.role === 'admin' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Admin
-          </button>
-        </div>
+        {!isLiveSupabaseConfigured && (
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto text-[11px]">
+            <span className="text-slate-400 hidden sm:inline">Demo Switcher:</span>
+            {/* Plan state toggle */}
+            <button
+              onClick={toggleDemoMembership}
+              className={`px-2 py-0.5 rounded font-semibold text-[10px] transition-colors ${
+                hasActivePlan ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Toggle Plan active/unsubscribed to test locked vs unlocked Earn states"
+            >
+              {hasActivePlan ? `Active: ${activePlan?.name}` : 'No Active Plan'}
+            </button>
+            {/* User vs Admin view toggle */}
+            <button
+              onClick={() => switchRole('user')}
+              className={`px-2 py-0.5 rounded font-medium ${
+                user?.role === 'user' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              User
+            </button>
+            <button
+              onClick={() => switchRole('admin')}
+              className={`px-2 py-0.5 rounded font-medium ${
+                user?.role === 'admin' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Admin
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

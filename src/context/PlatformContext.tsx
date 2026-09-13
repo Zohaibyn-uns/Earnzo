@@ -27,7 +27,7 @@ import {
   INITIAL_ANNOUNCEMENTS,
   DEFAULT_USER_PROFILE,
 } from '../lib/mockData';
-import { useAuth } from './AuthContext';
+import { useAuth, isValidUUID } from './AuthContext';
 import { supabase, isLiveSupabaseConfigured } from '../lib/supabase';
 
 export const DEFAULT_SETTINGS: SystemSettings = {
@@ -241,8 +241,8 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setPlans(plansData as Plan[]);
       }
 
-      // If user is authenticated, fetch their user-specific and admin data
-      if (currentUserId) {
+      // If user is authenticated with a valid UUID, fetch their user-specific and admin data
+      if (currentUserId && isValidUUID(currentUserId)) {
         // Memberships query
         const memQuery = isAdmin
           ? supabase.from('memberships').select('*, plan:plans(*)')
@@ -323,7 +323,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Realtime synchronization + Window Focus refetch
   useEffect(() => {
-    if (!isLiveSupabaseConfigured || !currentUserId) return;
+    if (!isLiveSupabaseConfigured || !currentUserId || !isValidUUID(currentUserId)) return;
 
     // Refetch on window focus
     const onFocus = () => {
@@ -663,10 +663,21 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Live Supabase integration
     if (isLiveSupabaseConfigured) {
       try {
+        // ALWAYS retrieve verified Supabase auth session user
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const effectiveUserId = authUser?.id || (isValidUUID(currentUserId) ? currentUserId : null);
+
+        if (!effectiveUserId || !isValidUUID(effectiveUserId)) {
+          return {
+            success: false,
+            message: 'Authentication required. Please log in with your verified account to complete this plan purchase.',
+          };
+        }
+
         const { data: insertedPayment, error } = await supabase
           .from('payments')
           .insert({
-            user_id: currentUserId,
+            user_id: effectiveUserId,
             plan_id: selectedPlan.id,
             amount: data.amount,
             method: data.method,
@@ -699,7 +710,8 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           message: 'Payment submitted successfully! Admin will verify and activate your plan.',
         };
       } catch (err: any) {
-        console.warn('Supabase submitPayment exception, falling back:', err.message);
+        console.error('Supabase submitPayment error:', err);
+        return { success: false, message: err.message || 'Failed to submit payment to database.' };
       }
     }
 

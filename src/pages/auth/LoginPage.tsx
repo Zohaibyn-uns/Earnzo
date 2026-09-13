@@ -36,13 +36,21 @@ export const LoginPage: React.FC = () => {
 
   const handleDemoLogin = (type: 'user' | 'admin') => {
     if (type === 'admin') {
-      setEmail('admin@earnzo.com');
-      setPassword('AdminPass123!');
-      login('admin@earnzo.com').then(() => navigate('/admin'));
+      const e = 'admin@earnzo.com';
+      const p = 'AdminPass123!';
+      setEmail(e);
+      setPassword(p);
+      login(e, p).then((res) => {
+        if (res.success) navigate('/admin');
+      });
     } else {
-      setEmail('user@earnzo.com');
-      setPassword('UserPass123!');
-      login('user@earnzo.com').then(() => navigate('/dashboard'));
+      const e = 'user@earnzo.com';
+      const p = 'UserPass123!';
+      setEmail(e);
+      setPassword(p);
+      login(e, p).then((res) => {
+        if (res.success) navigate('/dashboard');
+      });
     }
   };
 
