@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent } from '../../components/ui/Card';
 import { AlertBanner } from '../../components/ui/AlertBanner';
+import { isLiveSupabaseConfigured } from '../../lib/supabase';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -70,29 +71,31 @@ export const LoginPage: React.FC = () => {
           <p className="text-xs text-slate-500">Access your tasks, ledger wallet, and payouts</p>
         </div>
 
-        {/* Quick Demo Pre-fill helper */}
-        <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-2xl text-xs space-y-2">
-          <div className="font-semibold text-indigo-900 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-indigo-600" />
-            <span>Quick Demo Sign-In</span>
+        {/* Quick Demo Pre-fill helper (Offline demo only) */}
+        {!isLiveSupabaseConfigured && (
+          <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-2xl text-xs space-y-2">
+            <div className="font-semibold text-indigo-900 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              <span>Quick Demo Sign-In</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('user')}
+                className="py-1.5 px-2 bg-white hover:bg-indigo-100/50 text-indigo-700 font-medium rounded-lg border border-indigo-200 text-xs transition-colors"
+              >
+                Member Demo (Ali)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('admin')}
+                className="py-1.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs transition-colors"
+              >
+                Admin HQ Demo
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('user')}
-              className="py-1.5 px-2 bg-white hover:bg-indigo-100/50 text-indigo-700 font-medium rounded-lg border border-indigo-200 text-xs transition-colors"
-            >
-              Member Demo (Ali)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('admin')}
-              className="py-1.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs transition-colors"
-            >
-              Admin HQ Demo
-            </button>
-          </div>
-        </div>
+        )}
 
         <Card>
           <CardContent className="p-6 sm:p-8 space-y-5">
