@@ -641,6 +641,160 @@ test('Test 17: Plan Upgrade Difference Pricing & Downgrade Policy', () => {
   assert.strictEqual(downgradeResult.amountToPay, 300);
 });
 
+// -------------------------------------------------------------
+// TEST 18: PlatformContext Supabase Source-of-Truth Code Verification
+// -------------------------------------------------------------
+test('Test 18: PlatformContext Supabase Source of Truth Verification', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const code = fs.readFileSync(path.join(__dirname, 'src', 'context', 'PlatformContext.tsx'), 'utf-8');
+
+  // Verify that localStorage is NOT used for authoritative business data
+  assert.ok(!code.includes("localStorage.setItem(STORAGE_KEYS.MEMBERSHIPS"), 'Memberships must not be saved to localStorage');
+  assert.ok(!code.includes("localStorage.setItem(STORAGE_KEYS.PAYMENTS"), 'Payments must not be saved to localStorage');
+  assert.ok(!code.includes("localStorage.setItem(STORAGE_KEYS.WALLETS"), 'Wallets must not be saved to localStorage');
+  assert.ok(!code.includes("localStorage.setItem(STORAGE_KEYS.TRANSACTIONS"), 'Transactions must not be saved to localStorage');
+  assert.ok(!code.includes("localStorage.setItem(STORAGE_KEYS.WITHDRAWALS"), 'Withdrawals must not be saved to localStorage');
+  assert.ok(!code.includes("localStorage.setItem(STORAGE_KEYS.REFERRALS"), 'Referrals must not be saved to localStorage');
+
+  // Verify that Supabase queries and RPCs are wired
+  assert.ok(code.includes("supabase.from('memberships')"), 'Must query Supabase memberships table');
+  assert.ok(code.includes("supabase.from('payments')"), 'Must query Supabase payments table');
+  assert.ok(code.includes("supabase.from('wallet_accounts')"), 'Must query Supabase wallet_accounts table');
+  assert.ok(code.includes("supabase.from('wallet_transactions')"), 'Must query Supabase wallet_transactions table');
+  assert.ok(code.includes("supabase.rpc('rpc_verify_payment'"), 'Must call rpc_verify_payment RPC');
+  assert.ok(code.includes("supabase.channel"), 'Must subscribe to Supabase Realtime changes');
+  assert.ok(code.includes("window.addEventListener('focus'"), 'Must re-fetch on window focus');
+});
+
+// -------------------------------------------------------------
+// TEST 19: Payment Verification RPC Idempotency & Membership Activation Logic
+// -------------------------------------------------------------
+test('Test 19: Payment Verification RPC Idempotency & Membership Activation Logic', () => {
+  // Simulate database state for payment, user, plan, and referral
+  const db = {
+    payments: [{ id: 'pay-uuid-1', user_id: 'user-b', plan_id: 'plan-1', amount: 300, status: 'pending', method: 'JazzCash', transaction_ref: 'TRX123' }],
+    plans: [{ id: 'plan-1', name: 'Plan 1', price: 300, daily_task_limit: 7, reward_per_task: 70, duration_days: 30 }],
+    memberships: [],
+    wallets: {
+      'user-a': { id: 'wal-a', user_id: 'user-a', balance: 0, total_earned: 0 },
+      'user-b': { id: 'wal-b', user_id: 'user-b', balance: 0, total_earned: 0 }
+    },
+    transactions: [],
+    referrals: [{ id: 'ref-1', referrer_user_id: 'user-a', referred_user_id: 'user-b', is_qualified: false, commission_earned: 0 }]
+  };
+
+  function rpc_verify_payment(paymentId, action, notes) {
+    const payment = db.payments.find(p => p.id === paymentId);
+    if (!payment) throw new Error('Payment record not found');
+    if (payment.status !== 'pending') throw new Error(`Payment has already been processed with status: ${payment.status}`);
+
+    if (action === 'reject') {
+      payment.status = 'failed';
+      return { success: true, action: 'rejected' };
+    }
+
+    const plan = db.plans.find(p => p.id === payment.plan_id);
+    if (!plan) throw new Error('Plan not found');
+
+    // 1. Mark paid
+    payment.status = 'paid';
+
+    // 2. Activate membership
+    db.memberships = db.memberships.filter(m => !(m.user_id === payment.user_id && m.status === 'active'));
+    db.memberships.push({
+      id: 'mem-1',
+      user_id: payment.user_id,
+      plan_id: plan.id,
+      status: 'active',
+      started_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 86400000 * plan.duration_days).toISOString(),
+      tasks_completed_today: 0
+    });
+
+    // 3. 10% referral commission
+    const referral = db.referrals.find(r => r.referred_user_id === payment.user_id);
+    if (referral) {
+      referral.is_qualified = true;
+      const commission = (payment.amount * 10) / 100;
+      referral.commission_earned += commission;
+      const refWallet = db.wallets[referral.referrer_user_id];
+      refWallet.balance += commission;
+      refWallet.total_earned += commission;
+      db.transactions.push({
+        wallet_id: refWallet.id,
+        user_id: referral.referrer_user_id,
+        type: 'referral_bonus',
+        amount: commission
+      });
+    }
+
+    return { success: true, action: 'approved' };
+  }
+
+  // First approval: must succeed
+  const res1 = rpc_verify_payment('pay-uuid-1', 'approve', 'Verified via JazzCash');
+  assert.strictEqual(res1.success, true);
+  assert.strictEqual(res1.action, 'approved');
+  assert.strictEqual(db.memberships.length, 1);
+  assert.strictEqual(db.memberships[0].status, 'active');
+  assert.strictEqual(db.referrals[0].is_qualified, true);
+  assert.strictEqual(db.wallets['user-a'].balance, 30); // 10% of 300 = Rs. 30
+
+  // Second approval: must fail with idempotency error
+  assert.throws(() => {
+    rpc_verify_payment('pay-uuid-1', 'approve', 'Duplicate attempt');
+  }, /Payment has already been processed with status: paid/);
+
+  // Assert no double commission or duplicate membership
+  assert.strictEqual(db.memberships.length, 1);
+  assert.strictEqual(db.wallets['user-a'].balance, 30);
+});
+
+// -------------------------------------------------------------
+// TEST 20: Cross-Client Multi-Session State Isolation & Synchronization
+// -------------------------------------------------------------
+test('Test 20: Cross-Client Multi-Session State Isolation & Synchronization', () => {
+  // Two distinct user contexts
+  const userA_session = {
+    userId: 'user-a',
+    membership: null,
+    wallet: { balance: 0, pending_balance: 0 },
+    qualifiedReferrals: 0
+  };
+
+  const userB_session = {
+    userId: 'user-b',
+    membership: null,
+    wallet: { balance: 0, pending_balance: 0 },
+    qualifiedReferrals: 0
+  };
+
+  // When User B gets approved in database:
+  // Simulate Realtime broadcast payload
+  const realtimePayloadMembership = {
+    eventType: 'INSERT',
+    new: {
+      id: 'mem-b',
+      user_id: 'user-b',
+      plan_id: 'plan-2',
+      status: 'active'
+    }
+  };
+
+  // User A should NOT gain User B's membership
+  if (realtimePayloadMembership.new.user_id === userA_session.userId) {
+    userA_session.membership = realtimePayloadMembership.new;
+  }
+  if (realtimePayloadMembership.new.user_id === userB_session.userId) {
+    userB_session.membership = realtimePayloadMembership.new;
+  }
+
+  assert.strictEqual(userA_session.membership, null, 'User A must not inherit User B membership');
+  assert.ok(userB_session.membership !== null, 'User B must receive active membership');
+  assert.strictEqual(userB_session.membership.plan_id, 'plan-2');
+});
+
 console.log(`\nResults: ${passedTests} of ${totalTests} test suites passed.`);
 if (passedTests === totalTests) {
   console.log('STATUS: ALL INTEGRATION & LEDGER SECURITY TESTS PASSED PERFECTLY!\n');

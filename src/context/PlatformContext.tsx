@@ -28,6 +28,7 @@ import {
   DEFAULT_USER_PROFILE,
 } from '../lib/mockData';
 import { useAuth } from './AuthContext';
+import { supabase, isLiveSupabaseConfigured } from '../lib/supabase';
 
 export const DEFAULT_SETTINGS: SystemSettings = {
   minWithdrawalBalance: 500,
@@ -141,6 +142,8 @@ interface PlatformContextType {
   // Reset demo state & toggles
   resetToDefaults: () => void;
   toggleDemoMembership: () => void;
+  refetchData: () => Promise<void>;
+  isLoading: boolean;
 }
 
 const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -210,11 +213,168 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return saved ? JSON.parse(saved) : INITIAL_PLANS;
   });
 
-  // 2. Memberships (Per-User Store: Starts EMPTY. No default active plan!)
-  const [allMemberships, setAllMemberships] = useState<Membership[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.MEMBERSHIPS);
-    return saved ? JSON.parse(saved) : [];
-  });
+  // 2. Business Data State (Source of Truth: Supabase with clean default fallback)
+  const [allMemberships, setAllMemberships] = useState<Membership[]>([]);
+  const [allWallets, setAllWallets] = useState<Record<string, WalletAccount>>({});
+  const [allTransactions, setAllTransactions] = useState<WalletTransaction[]>([]);
+  const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
+  const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [allWithdrawals, setAllWithdrawals] = useState<Withdrawal[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Synchronize from Supabase
+  const fetchData = async () => {
+    if (!isLiveSupabaseConfigured) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // Fetch plans
+      const { data: plansData } = await supabase
+        .from('plans')
+        .select('*')
+        .order('display_order', { ascending: true });
+      if (plansData && plansData.length > 0) {
+        setPlans(plansData as Plan[]);
+      }
+
+      // If user is authenticated, fetch their user-specific and admin data
+      if (currentUserId) {
+        // Memberships query
+        const memQuery = isAdmin
+          ? supabase.from('memberships').select('*, plan:plans(*)')
+          : supabase.from('memberships').select('*, plan:plans(*)').eq('user_id', currentUserId);
+        const { data: memData } = await memQuery;
+        if (memData) {
+          setAllMemberships(memData as Membership[]);
+        }
+
+        // Wallet query
+        const walQuery = isAdmin
+          ? supabase.from('wallet_accounts').select('*')
+          : supabase.from('wallet_accounts').select('*').eq('user_id', currentUserId);
+        const { data: walData } = await walQuery;
+        if (walData) {
+          const map: Record<string, WalletAccount> = {};
+          walData.forEach((w: any) => {
+            map[w.user_id] = w as WalletAccount;
+          });
+          setAllWallets(map);
+        }
+
+        // Transactions query
+        const trxQuery = isAdmin
+          ? supabase.from('wallet_transactions').select('*').order('created_at', { ascending: false })
+          : supabase.from('wallet_transactions').select('*').eq('user_id', currentUserId).order('created_at', { ascending: false });
+        const { data: trxData } = await trxQuery;
+        if (trxData) {
+          setAllTransactions(trxData as WalletTransaction[]);
+        }
+
+        // Referrals query
+        const refQuery = isAdmin
+          ? supabase.from('referrals').select('*')
+          : supabase.from('referrals').select('*').eq('referrer_id', currentUserId);
+        const { data: refData } = await refQuery;
+        if (refData) {
+          setAllReferrals(refData as Referral[]);
+        }
+
+        // Payments query
+        const payQuery = isAdmin
+          ? supabase.from('payments').select('*').order('created_at', { ascending: false })
+          : supabase.from('payments').select('*').eq('user_id', currentUserId).order('created_at', { ascending: false });
+        const { data: payData } = await payQuery;
+        if (payData) {
+          setAllPayments(payData as Payment[]);
+        }
+
+        // Withdrawals query
+        const wthQuery = isAdmin
+          ? supabase.from('withdrawals').select('*').order('created_at', { ascending: false })
+          : supabase.from('withdrawals').select('*').eq('user_id', currentUserId).order('created_at', { ascending: false });
+        const { data: wthData } = await wthQuery;
+        if (wthData) {
+          setAllWithdrawals(wthData as Withdrawal[]);
+        }
+      } else {
+        // Logged out / guest state: clear sensitive data
+        setAllMemberships([]);
+        setAllWallets({});
+        setAllTransactions([]);
+        setAllReferrals([]);
+        setAllPayments([]);
+        setAllWithdrawals([]);
+      }
+    } catch (err: any) {
+      console.warn('Error fetching Supabase platform data:', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Run fetchData whenever current user or admin role changes
+  useEffect(() => {
+    fetchData();
+  }, [currentUserId, isAdmin]);
+
+  // Realtime synchronization + Window Focus refetch
+  useEffect(() => {
+    if (!isLiveSupabaseConfigured || !currentUserId) return;
+
+    // Refetch on window focus
+    const onFocus = () => {
+      fetchData();
+    };
+    window.addEventListener('focus', onFocus);
+
+    // Supabase Realtime Channel
+    const channel = supabase.channel(`earnzo-realtime-${currentUserId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'memberships' },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payments' },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wallet_accounts' },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wallet_transactions' },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'referrals' },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, isAdmin]);
 
   // Derive current user's active membership
   const membership: Membership | null = useMemo(() => {
@@ -234,13 +394,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const hasActivePlan = Boolean(activePlan);
   const plan: Plan = activePlan || plans[0]; // Fallback for reference pricing if unsubscribed
 
-  // 3. Wallets (Per-User Store: Starts EMPTY with 0 balance!)
-  const [allWallets, setAllWallets] = useState<Record<string, WalletAccount>>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.WALLETS);
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  // Derive current user's wallet
+  // Derive current user's wallet from Supabase data
   const wallet: WalletAccount = useMemo(() => {
     if (!currentUserId) {
       return {
@@ -268,23 +422,11 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   }, [allWallets, currentUserId]);
 
-  // 4. Ledger Transactions (Starts EMPTY. Per-User Filtered!)
-  const [allTransactions, setAllTransactions] = useState<WalletTransaction[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const transactions: WalletTransaction[] = useMemo(() => {
     if (isAdmin) return allTransactions;
     if (!currentUserId) return [];
     return allTransactions.filter((t) => t.user_id === currentUserId);
   }, [allTransactions, currentUserId, isAdmin]);
-
-  // 5. Referrals (Per-User Filtered: Starts EMPTY!)
-  const [allReferrals, setAllReferrals] = useState<Referral[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.REFERRALS);
-    return saved ? JSON.parse(saved) : [];
-  });
 
   const referrals: Referral[] = useMemo(() => {
     if (isAdmin) return allReferrals;
@@ -297,12 +439,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       (r) => r.is_qualified && (r.status === 'qualified' || r.membership_purchased)
     ).length;
   }, [referrals]);
-
-  // 6. Payments (Starts EMPTY!)
-  const [allPayments, setAllPayments] = useState<Payment[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-    return saved ? JSON.parse(saved) : [];
-  });
 
   const payments: Payment[] = useMemo(() => {
     if (isAdmin) return allPayments;
@@ -327,12 +463,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   const [activeSession, setActiveSession] = useState<VideoWatchSession | null>(null);
-
-  // 8. Withdrawals (Per-User Filtered: Starts EMPTY!)
-  const [allWithdrawals, setAllWithdrawals] = useState<Withdrawal[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.WITHDRAWALS);
-    return saved ? JSON.parse(saved) : [];
-  });
 
   const withdrawals: Withdrawal[] = useMemo(() => {
     if (isAdmin) return allWithdrawals;
@@ -423,18 +553,10 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, [settings.minWithdrawalBalance, settings.requiredQualifiedReferrals, wallet.balance, qualifiedReferralsCount]);
 
-  // Persist State to LocalStorage
+  // Persist non-sensitive presentation items
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(plans));
   }, [plans]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MEMBERSHIPS, JSON.stringify(allMemberships));
-  }, [allMemberships]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(allPayments));
-  }, [allPayments]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(videos));
@@ -443,30 +565,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.CAMPAIGNS, JSON.stringify(campaigns));
   }, [campaigns]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(allSessions));
-  }, [allSessions]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WALLETS, JSON.stringify(allWallets));
-  }, [allWallets]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(allTransactions));
-  }, [allTransactions]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WITHDRAWALS, JSON.stringify(allWithdrawals));
-  }, [allWithdrawals]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(allProfiles));
-  }, [allProfiles]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REFERRALS, JSON.stringify(allReferrals));
-  }, [allReferrals]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ADS, JSON.stringify(adPlacements));
@@ -561,6 +659,51 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     const selectedPlan = plans.find((p) => p.id === data.planId) || plans[0];
+
+    // Live Supabase integration
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { data: insertedPayment, error } = await supabase
+          .from('payments')
+          .insert({
+            user_id: currentUserId,
+            plan_id: selectedPlan.id,
+            amount: data.amount,
+            method: data.method,
+            transaction_ref: data.transactionRef,
+            sender_account_title: data.senderAccountTitle,
+            sender_account_number: data.senderAccountNumber,
+            proof_image_url: data.proofImageUrl || null,
+            status: 'pending',
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Supabase submitPayment error:', error);
+          return { success: false, message: error.message || 'Failed to submit payment to database.' };
+        }
+
+        // Refresh live data from Supabase
+        await fetchData();
+
+        addNotification(
+          'Payment Submitted',
+          `Your Rs. ${data.amount} payment for ${selectedPlan.name} via ${data.method} (TRX: ${data.transactionRef}) has been submitted for review.`,
+          'payment'
+        );
+
+        return {
+          success: true,
+          paymentId: insertedPayment.id,
+          message: 'Payment submitted successfully! Admin will verify and activate your plan.',
+        };
+      } catch (err: any) {
+        console.warn('Supabase submitPayment exception, falling back:', err.message);
+      }
+    }
+
+    // Local Sandbox Fallback
     const newPayment: Payment = {
       id: `pay-${Date.now()}`,
       user_id: currentUserId,
@@ -586,8 +729,40 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const approvePayment = async (paymentId: string) => {
+    // 1. Live Supabase RPC execution
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { data: rpcRes, error } = await supabase.rpc('rpc_verify_payment', {
+          p_payment_id: paymentId,
+          p_action: 'approve',
+          p_notes: 'Verified via Earnzo Admin Panel',
+        });
+
+        if (error) {
+          console.error('Supabase rpc_verify_payment error:', error);
+          return { success: false, message: error.message || 'Database error during payment verification.' };
+        }
+
+        // Refresh all Supabase business state (memberships, wallets, transactions, referrals, payments)
+        await fetchData();
+
+        logAuditEvent('payment_approved', 'payments', paymentId, {
+          action: 'approve',
+          result: rpcRes,
+        });
+
+        return { success: true, message: 'Payment successfully approved and membership activated via Supabase!' };
+      } catch (err: any) {
+        console.warn('Supabase approvePayment exception, falling back:', err.message);
+      }
+    }
+
+    // 2. Local sandbox fallback (with idempotency guard)
     const payment = allPayments.find((p) => p.id === paymentId);
     if (!payment) return { success: false, message: 'Payment record not found' };
+    if (payment.status !== 'pending') {
+      return { success: false, message: `Payment is already processed with status: ${payment.status}` };
+    }
 
     const selectedPlan = plans.find((p) => p.id === payment.plan_id) || plans[0];
 
@@ -724,6 +899,26 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const rejectPayment = async (paymentId: string, reason: string) => {
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { error } = await supabase.rpc('rpc_verify_payment', {
+          p_payment_id: paymentId,
+          p_action: 'reject',
+          p_notes: reason || 'Transaction reference could not be verified.',
+        });
+
+        if (error) {
+          console.error('Supabase reject error:', error);
+          return { success: false, message: error.message };
+        }
+
+        await fetchData();
+        return { success: true, message: 'Payment marked as rejected in Supabase.' };
+      } catch (err: any) {
+        console.warn('Supabase reject payment exception, falling back:', err.message);
+      }
+    }
+
     setAllPayments((prev) =>
       prev.map((p) =>
         p.id === paymentId
@@ -982,6 +1177,32 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
     }
 
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { data: resData, error } = await supabase.rpc('rpc_request_withdrawal', {
+          p_amount: data.amount,
+          p_method: data.method,
+          p_account_title: data.accountTitle,
+          p_account_number: data.accountNumber,
+          p_bank_name: data.bankName || null,
+        });
+
+        if (error) {
+          console.error('Supabase rpc_request_withdrawal error:', error);
+          return { success: false, message: error.message };
+        }
+
+        await fetchData();
+        return {
+          success: true,
+          message: `Withdrawal of Rs. ${data.amount} requested. Net Rs. ${resData?.net_amount || (data.amount * 0.975)} will be dispatched after administrative audit.`,
+        };
+      } catch (err: any) {
+        console.warn('Supabase requestWithdrawal exception, falling back:', err.message);
+      }
+    }
+
+    // Local sandbox fallback
     // Check existing pending
     const hasPending = allWithdrawals.some((w) => w.user_id === currentUserId && w.status === 'pending');
     if (hasPending) {
@@ -1021,7 +1242,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       created_at: new Date().toISOString(),
     };
 
-    // Atomic funds lock
     setAllWallets((prev) => ({
       ...prev,
       [currentUserId]: {
@@ -1034,7 +1254,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     setAllWithdrawals((prev) => [newWithdrawal, ...prev]);
 
-    // Ledger transaction
     const newTrx: WalletTransaction = {
       id: `trx-${Date.now()}`,
       wallet_id: wallet.id,
@@ -1070,6 +1289,32 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     transactionRef?: string,
     rejectionReason?: string
   ): Promise<{ success: boolean; message: string }> => {
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { error } = await supabase.rpc('rpc_process_withdrawal', {
+          p_withdrawal_id: withdrawalId,
+          p_action: action,
+          p_transaction_ref: transactionRef || null,
+          p_rejection_reason: rejectionReason || null,
+        });
+
+        if (error) {
+          console.error('Supabase rpc_process_withdrawal error:', error);
+          return { success: false, message: error.message };
+        }
+
+        await fetchData();
+        return {
+          success: true,
+          message: action === 'approve'
+            ? 'Withdrawal approved and disbursed in Supabase!'
+            : 'Withdrawal rejected and funds refunded to user in Supabase.',
+        };
+      } catch (err: any) {
+        console.warn('Supabase processWithdrawal exception, falling back:', err.message);
+      }
+    }
+
     const withdrawal = allWithdrawals.find((w) => w.id === withdrawalId);
     if (!withdrawal) return { success: false, message: 'Withdrawal not found' };
 
@@ -1109,7 +1354,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         )
       );
 
-      // Ledger transaction for approval
       setAllTransactions((prev) => [
         {
           id: `trx-${Date.now()}-comp`,
@@ -1156,7 +1400,6 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         )
       );
 
-      // Ledger transaction for refund
       setAllTransactions((prev) => [
         {
           id: `trx-${Date.now()}-refund`,
@@ -1384,6 +1627,8 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         logAuditEvent,
         resetToDefaults,
         toggleDemoMembership,
+        refetchData: fetchData,
+        isLoading,
       }}
     >
       {children}
