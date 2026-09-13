@@ -14,23 +14,47 @@ export const AdminPayments: React.FC = () => {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   const handleApprove = async (id: string) => {
-    const res = await approvePayment(id);
-    if (res.success) {
-      setActionNotice(res.message);
-      setTimeout(() => setActionNotice(null), 3500);
+    setActionError(null);
+    setActionNotice(null);
+    setIsProcessing(id);
+    try {
+      const res = await approvePayment(id);
+      if (res.success) {
+        setActionNotice(res.message);
+        setTimeout(() => setActionNotice(null), 4000);
+      } else {
+        setActionError(res.message || 'Payment approval failed.');
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'An unexpected error occurred.');
+    } finally {
+      setIsProcessing(null);
     }
   };
 
   const handleReject = async () => {
     if (!selectedPayId) return;
-    const res = await rejectPayment(selectedPayId, rejectReason);
-    setRejectModalOpen(false);
-    setRejectReason('');
-    if (res.success) {
-      setActionNotice('Payment marked as rejected.');
-      setTimeout(() => setActionNotice(null), 3500);
+    setActionError(null);
+    setActionNotice(null);
+    setIsProcessing(selectedPayId);
+    try {
+      const res = await rejectPayment(selectedPayId, rejectReason);
+      setRejectModalOpen(false);
+      setRejectReason('');
+      if (res.success) {
+        setActionNotice('Payment marked as rejected.');
+        setTimeout(() => setActionNotice(null), 4000);
+      } else {
+        setActionError(res.message || 'Payment rejection failed.');
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'An unexpected error occurred.');
+    } finally {
+      setIsProcessing(null);
     }
   };
 
@@ -48,6 +72,12 @@ export const AdminPayments: React.FC = () => {
       {actionNotice && (
         <div className="p-4 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-2xl text-xs font-semibold">
           {actionNotice}
+        </div>
+      )}
+
+      {actionError && (
+        <div className="p-4 bg-rose-500/20 border border-rose-500/40 text-rose-300 rounded-2xl text-xs font-semibold">
+          {actionError}
         </div>
       )}
 
@@ -103,6 +133,8 @@ export const AdminPayments: React.FC = () => {
                           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
                           leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
                           onClick={() => handleApprove(p.id)}
+                          disabled={Boolean(isProcessing)}
+                          isLoading={isProcessing === p.id}
                         >
                           Approve & Activate
                         </Button>
@@ -114,6 +146,7 @@ export const AdminPayments: React.FC = () => {
                             setSelectedPayId(p.id);
                             setRejectModalOpen(true);
                           }}
+                          disabled={Boolean(isProcessing)}
                         >
                           Reject
                         </Button>

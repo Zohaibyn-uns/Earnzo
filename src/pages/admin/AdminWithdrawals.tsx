@@ -15,26 +15,48 @@ export const AdminWithdrawals: React.FC = () => {
   const [trxRef, setTrxRef] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   const handleApprove = async () => {
     if (!selectedId) return;
-    const res = await processWithdrawal(selectedId, 'approve', trxRef);
-    setApproveModalOpen(false);
-    setTrxRef('');
-    if (res.success) {
-      setNotice('Withdrawal approved and marked as paid. Payout ledger transaction posted.');
-      setTimeout(() => setNotice(null), 3500);
+    setIsProcessing(selectedId);
+    setActionError(null);
+    try {
+      const res = await processWithdrawal(selectedId, 'approve', trxRef);
+      setApproveModalOpen(false);
+      setTrxRef('');
+      if (res.success) {
+        setNotice('Withdrawal approved and marked as paid. Payout ledger transaction posted.');
+        setTimeout(() => setNotice(null), 4000);
+      } else {
+        setActionError(res.message || 'Failed to approve withdrawal.');
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'An error occurred while approving withdrawal.');
+    } finally {
+      setIsProcessing(null);
     }
   };
 
   const handleReject = async () => {
     if (!selectedId) return;
-    const res = await processWithdrawal(selectedId, 'reject', undefined, rejectReason);
-    setRejectModalOpen(false);
-    setRejectReason('');
-    if (res.success) {
-      setNotice('Withdrawal rejected. Funds have been refunded to the user wallet.');
-      setTimeout(() => setNotice(null), 3500);
+    setIsProcessing(selectedId);
+    setActionError(null);
+    try {
+      const res = await processWithdrawal(selectedId, 'reject', undefined, rejectReason);
+      setRejectModalOpen(false);
+      setRejectReason('');
+      if (res.success) {
+        setNotice('Withdrawal rejected. Funds have been refunded to the user wallet.');
+        setTimeout(() => setNotice(null), 4000);
+      } else {
+        setActionError(res.message || 'Failed to reject withdrawal.');
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'An error occurred while rejecting withdrawal.');
+    } finally {
+      setIsProcessing(null);
     }
   };
 
@@ -52,6 +74,12 @@ export const AdminWithdrawals: React.FC = () => {
       {notice && (
         <div className="p-4 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-2xl text-xs font-semibold">
           {notice}
+        </div>
+      )}
+
+      {actionError && (
+        <div className="p-4 bg-rose-500/20 border border-rose-500/40 text-rose-300 rounded-2xl text-xs font-semibold">
+          {actionError}
         </div>
       )}
 
@@ -150,7 +178,14 @@ export const AdminWithdrawals: React.FC = () => {
             value={trxRef}
             onChange={(e) => setTrxRef(e.target.value)}
           />
-          <Button variant="primary" size="md" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleApprove}>
+          <Button
+            variant="primary"
+            size="md"
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
+            onClick={handleApprove}
+            disabled={Boolean(isProcessing)}
+            isLoading={Boolean(isProcessing)}
+          >
             Confirm Payout & Deduct Balance
           </Button>
         </div>
@@ -169,7 +204,14 @@ export const AdminWithdrawals: React.FC = () => {
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
           />
-          <Button variant="danger" size="md" className="w-full" onClick={handleReject}>
+          <Button
+            variant="danger"
+            size="md"
+            className="w-full"
+            onClick={handleReject}
+            disabled={Boolean(isProcessing)}
+            isLoading={Boolean(isProcessing)}
+          >
             Confirm Rejection & Refund Funds
           </Button>
         </div>

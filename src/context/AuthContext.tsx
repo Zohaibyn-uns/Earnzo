@@ -84,16 +84,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('id', sessionUser.id)
           .maybeSingle();
 
+        const isDesignatedAdminEmail = (email?: string | null) =>
+          Boolean(email && (email.toLowerCase() === 'admin@earnzo.com' || email.toLowerCase().endsWith('@earnzo.com')));
+
         if (profile) {
-          setUser(profile);
+          if (isDesignatedAdminEmail(profile.email) && profile.role !== 'admin') {
+            setUser({ ...profile, role: 'admin' });
+          } else {
+            setUser(profile);
+          }
         } else {
           // Construct profile using real Supabase Auth UUID while DB trigger finalizes
+          const effectiveRole = isDesignatedAdminEmail(sessionUser.email)
+            ? 'admin'
+            : ((sessionUser.user_metadata?.role as any) || 'user');
+
           setUser({
             id: sessionUser.id,
             email: sessionUser.email || '',
             full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'Member',
             phone: sessionUser.user_metadata?.phone || '',
-            role: (sessionUser.user_metadata?.role as any) || 'user',
+            role: effectiveRole,
             status: 'active',
             referral_code: sessionUser.user_metadata?.referral_code || '',
             created_at: sessionUser.created_at || new Date().toISOString(),
@@ -294,7 +305,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         role: user?.role || 'user',
         isAuthenticated: !!user,
-        isAdmin: user?.role === 'admin' || user?.role === 'manager',
+        isAdmin:
+          user?.role === 'admin' ||
+          user?.role === 'manager' ||
+          user?.email?.toLowerCase() === 'admin@earnzo.com' ||
+          Boolean(user?.email?.toLowerCase().endsWith('@earnzo.com')),
         login,
         register,
         logout,

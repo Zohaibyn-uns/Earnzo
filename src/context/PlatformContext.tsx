@@ -300,6 +300,17 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (wthData) {
           setAllWithdrawals(wthData as Withdrawal[]);
         }
+
+        // Profiles query (Admin view)
+        if (isAdmin) {
+          const { data: profData } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (profData && profData.length > 0) {
+            setAllProfiles(profData as Profile[]);
+          }
+        }
       } else {
         // Logged out / guest state: clear sensitive data
         setAllMemberships([]);
@@ -1434,17 +1445,31 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Profiles & Users
-  const updateUserStatus = (userId: string, status: 'active' | 'suspended' | 'banned') => {
+  const updateUserStatus = async (userId: string, status: 'active' | 'suspended' | 'banned') => {
     setAllProfiles((prev) =>
       prev.map((p) => (p.id === userId ? { ...p, status, updated_at: new Date().toISOString() } : p))
     );
+    if (isLiveSupabaseConfigured && isValidUUID(userId)) {
+      try {
+        await supabase.from('profiles').update({ status, updated_at: new Date().toISOString() }).eq('id', userId);
+      } catch (e) {
+        console.warn('Failed to update profile status in Supabase:', e);
+      }
+    }
     logAuditEvent('user_status_changed', 'profiles', userId, { status });
   };
 
-  const updateUserRole = (userId: string, role: 'user' | 'support' | 'manager' | 'admin') => {
+  const updateUserRole = async (userId: string, role: 'user' | 'support' | 'manager' | 'admin') => {
     setAllProfiles((prev) =>
       prev.map((p) => (p.id === userId ? { ...p, role, updated_at: new Date().toISOString() } : p))
     );
+    if (isLiveSupabaseConfigured && isValidUUID(userId)) {
+      try {
+        await supabase.from('profiles').update({ role, updated_at: new Date().toISOString() }).eq('id', userId);
+      } catch (e) {
+        console.warn('Failed to update profile role in Supabase:', e);
+      }
+    }
     logAuditEvent('user_role_changed', 'profiles', userId, { role });
   };
 
