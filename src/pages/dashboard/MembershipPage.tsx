@@ -22,7 +22,11 @@ import { Badge } from '../../components/ui/Badge';
 import { AlertBanner } from '../../components/ui/AlertBanner';
 
 export const MembershipPage: React.FC = () => {
-  const { plan, activePlan, hasActivePlan, membership, payments, submitPayment, approvePayment } = usePlatform();
+  const { plan, activePlan, hasActivePlan, membership, payments, submitPayment, approvePayment, refetchData } = usePlatform();
+
+  React.useEffect(() => {
+    refetchData();
+  }, []);
 
   const [method, setMethod] = useState<'JazzCash' | 'Easypaisa' | 'Bank Transfer'>('JazzCash');
   const [transactionRef, setTransactionRef] = useState('');

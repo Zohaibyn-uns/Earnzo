@@ -20,6 +20,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { DisplayAdUnit } from '../../components/ads/DisplayAdUnit';
+import { ContentElementRenderer } from '../../components/content/ContentElementRenderer';
 
 export const DashboardOverview: React.FC = () => {
   const { user, isAdmin } = useAuth();
@@ -65,6 +66,9 @@ export const DashboardOverview: React.FC = () => {
           </Badge>
         </div>
       </div>
+
+      {/* Dynamic Content Element: Dashboard Top */}
+      <ContentElementRenderer placement="dashboard_top" />
 
       {/* Pending Payment Verification Banner */}
       {pendingPayment && !hasActivePlan && (
@@ -284,6 +288,9 @@ export const DashboardOverview: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Dynamic Content Element: Dashboard Content Break */}
+      <ContentElementRenderer placement="dashboard_content" />
+
       {/* Non-Incentivized Third-Party Display Ad */}
       <DisplayAdUnit placement="dashboard" />
 
@@ -337,6 +344,9 @@ export const DashboardOverview: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Dynamic Content Element: Dashboard Bottom */}
+      <ContentElementRenderer placement="dashboard_bottom" />
     </div>
   );
 };

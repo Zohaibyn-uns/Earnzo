@@ -21,12 +21,17 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { AlertBanner } from '../../components/ui/AlertBanner';
+import { ContentElementRenderer } from '../../components/content/ContentElementRenderer';
 import { formatCurrency } from '../../lib/utils';
 
 export const PlansPage: React.FC = () => {
-  const { plans, activePlan, submitPayment, settings } = usePlatform();
+  const { plans, activePlan, submitPayment, settings, refetchData } = usePlatform();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    refetchData();
+  }, []);
 
   // Checkout modal state
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
@@ -94,6 +99,9 @@ export const PlansPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-12">
+      {/* Dynamic Content Element: Plans Top */}
+      <ContentElementRenderer placement="plans_top" />
+
       {/* Top Header */}
       <div className="text-center max-w-3xl mx-auto space-y-4">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200/80 text-indigo-700 text-xs font-semibold">
@@ -126,7 +134,12 @@ export const PlansPage: React.FC = () => {
             <div
               key={p.id}
               className={`relative rounded-3xl transition-all duration-300 overflow-hidden border ${
-                isVip
+                isCurrentActive
+                  ? 'border-emerald-500 ring-2 ring-emerald-500/40 shadow-xl ' +
+                    (isVip
+                      ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white'
+                      : 'bg-white text-slate-900')
+                  : isVip
                   ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white border-amber-500/40 shadow-2xl hover:shadow-indigo-500/20'
                   : isPopular
                   ? 'bg-gradient-to-br from-white via-indigo-50/40 to-white text-slate-900 border-indigo-500/60 shadow-xl hover:shadow-indigo-200'
@@ -134,7 +147,12 @@ export const PlansPage: React.FC = () => {
               }`}
             >
               {/* Badge Ribbons */}
-              {p.badge && (
+              {isCurrentActive ? (
+                <div className="absolute top-0 right-8 px-4 py-1.5 rounded-b-xl text-[11px] font-black uppercase tracking-wider shadow-md bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>ACTIVATED PLAN</span>
+                </div>
+              ) : p.badge ? (
                 <div
                   className={`absolute top-0 right-8 px-4 py-1 rounded-b-xl text-[11px] font-black uppercase tracking-wider shadow-sm ${
                     isVip
@@ -144,7 +162,7 @@ export const PlansPage: React.FC = () => {
                 >
                   {p.badge}
                 </div>
-              )}
+              ) : null}
 
               <div className="p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 {/* Left: Plan Specs */}
@@ -160,8 +178,9 @@ export const PlansPage: React.FC = () => {
                       {p.name}
                     </span>
                     {isCurrentActive && (
-                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800">
-                        Active Plan
+                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-500/40 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        Activated Plan
                       </span>
                     )}
                   </div>
@@ -199,24 +218,43 @@ export const PlansPage: React.FC = () => {
 
                 {/* Right: CTA Button */}
                 <div className="shrink-0 flex flex-col sm:items-end justify-center pt-2 md:pt-0">
-                  <Button
-                    size="lg"
-                    variant={isVip ? 'primary' : isPopular ? 'primary' : 'outline'}
-                    className={`w-full sm:w-auto font-black px-8 py-3.5 rounded-2xl shadow-lg transition-transform hover:scale-105 ${
-                      isVip
-                        ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-slate-950 hover:from-amber-500 hover:to-amber-700 shadow-amber-500/20'
-                        : isPopular
-                        ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
-                        : ''
-                    }`}
-                    onClick={() => handleOpenCheckout(p)}
-                    rightIcon={<ArrowRight className="w-4 h-4" />}
-                  >
-                    {p.cta_text || `Buy ${p.name}`}
-                  </Button>
-                  <span className={`text-[10px] mt-2 block sm:text-right ${isVip ? 'text-slate-400' : 'text-slate-400'}`}>
-                    Verified Payment Required
-                  </span>
+                  {isCurrentActive ? (
+                    <div className="w-full sm:w-auto flex flex-col items-center sm:items-end">
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        disabled
+                        className="w-full sm:w-auto font-black px-8 py-3.5 rounded-2xl border-emerald-500/50 bg-emerald-500/15 text-emerald-400 cursor-default"
+                        leftIcon={<CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                      >
+                        Activated Plan
+                      </Button>
+                      <span className="text-[10px] mt-2 block sm:text-right text-emerald-500 font-semibold">
+                        ✓ Your Current Active Tier
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        size="lg"
+                        variant={isVip ? 'primary' : isPopular ? 'primary' : 'outline'}
+                        className={`w-full sm:w-auto font-black px-8 py-3.5 rounded-2xl shadow-lg transition-transform hover:scale-105 ${
+                          isVip
+                            ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-slate-950 hover:from-amber-500 hover:to-amber-700 shadow-amber-500/20'
+                            : isPopular
+                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
+                            : ''
+                        }`}
+                        onClick={() => handleOpenCheckout(p)}
+                        rightIcon={<ArrowRight className="w-4 h-4" />}
+                      >
+                        {p.cta_text || `Buy ${p.name}`}
+                      </Button>
+                      <span className={`text-[10px] mt-2 block sm:text-right ${isVip ? 'text-slate-400' : 'text-slate-400'}`}>
+                        Verified Payment Required
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -234,6 +272,9 @@ export const PlansPage: React.FC = () => {
           Earnzo is an authentic sponsored video advertising hub. Membership fees cover identity screening, cryptographic playback telemetry, and access to sponsored task pools. We make zero claims of guaranteed investment dividends or fixed interest returns.
         </p>
       </div>
+
+      {/* Dynamic Content Element: Plans Bottom */}
+      <ContentElementRenderer placement="plans_bottom" />
 
       {/* Checkout Modal */}
       <Modal

@@ -1,22 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePlatform } from '../../context/PlatformContext';
 import { VideoTask } from '../../types/database';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
-import { Video, Plus, Edit2, Trash2, Clock, Award, Eye } from 'lucide-react';
+import { Video, Plus, Edit2, Trash2, Clock, Award, Eye, CheckCircle2, AlertCircle, Play } from 'lucide-react';
+import { parseYouTubeVideo } from '../../lib/youtube';
 
 export const AdminVideos: React.FC = () => {
-  const { videos, campaigns, addVideo, updateVideo, deleteVideo } = usePlatform();
+  const { videos, campaigns, addVideo, updateVideo, deleteVideo, refetchData } = usePlatform();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<VideoTask | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    refetchData();
+  }, []);
 
   // Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
+  const [videoSourceInput, setVideoSourceInput] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [durationSeconds, setDurationSeconds] = useState(30);
   const [rewardAmount, setRewardAmount] = useState(10);
@@ -24,11 +33,28 @@ export const AdminVideos: React.FC = () => {
   const [category, setCategory] = useState('Technology');
   const [sponsorBadge, setSponsorBadge] = useState('Official Sponsor');
 
+  const parsedVideo = parseYouTubeVideo(videoSourceInput);
+
+  const handleSourceInputChange = (val: string) => {
+    setVideoSourceInput(val);
+    const parsed = parseYouTubeVideo(val);
+    if (parsed.isYouTube && parsed.embedUrl) {
+      setVideoUrl(parsed.embedUrl);
+      if (!thumbnailUrl || thumbnailUrl.includes('img.youtube.com') || thumbnailUrl.includes('unsplash.com')) {
+        setThumbnailUrl(parsed.defaultThumbnailUrl || '');
+      }
+    } else {
+      setVideoUrl(val.trim());
+    }
+  };
+
   const handleOpenCreate = () => {
     setTitle('');
     setDescription('');
-    setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
-    setThumbnailUrl('https://images.unsplash.com/photo-1558002038-1055907df827?w=600&auto=format&fit=crop&q=80');
+    const defaultYt = 'https://www.youtube.com/embed/dQw4w9WgXcQ';
+    setVideoSourceInput(defaultYt);
+    setVideoUrl(defaultYt);
+    setThumbnailUrl('https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
     setDurationSeconds(30);
     setRewardAmount(10);
     setCampaignId(campaigns[0]?.id || '');
@@ -40,6 +66,7 @@ export const AdminVideos: React.FC = () => {
     setEditingVideo(v);
     setTitle(v.title);
     setDescription(v.description);
+    setVideoSourceInput(v.video_url);
     setVideoUrl(v.video_url);
     setThumbnailUrl(v.thumbnail_url);
     setDurationSeconds(v.duration_seconds);
@@ -50,10 +77,14 @@ export const AdminVideos: React.FC = () => {
     setIsCreateOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setActionError(null);
+    setActionSuccess(null);
+
     if (editingVideo) {
-      updateVideo(editingVideo.id, {
+      const res = await updateVideo(editingVideo.id, {
         title,
         description,
         video_url: videoUrl,
@@ -64,8 +95,15 @@ export const AdminVideos: React.FC = () => {
         category,
         sponsor_badge: sponsorBadge,
       });
+
+      if (!res.success) {
+        setActionError(res.error || 'Failed to update sponsored video in database');
+        setIsSubmitting(false);
+        return;
+      }
+      setActionSuccess(`Task "${title}" updated successfully.`);
     } else {
-      addVideo({
+      const res = await addVideo({
         title,
         description,
         video_url: videoUrl,
@@ -79,13 +117,44 @@ export const AdminVideos: React.FC = () => {
         category,
         sponsor_badge: sponsorBadge,
       });
+
+      if (!res.success) {
+        setActionError(res.error || 'Failed to publish sponsored video to database');
+        setIsSubmitting(false);
+        return;
+      }
+      setActionSuccess(`New sponsored task "${title}" published and live for users.`);
     }
+
+    setIsSubmitting(false);
     setIsCreateOpen(false);
+    setTimeout(() => setActionSuccess(null), 5000);
   };
 
-  const toggleStatus = (v: VideoTask) => {
+  const toggleStatus = async (v: VideoTask) => {
     const nextStatus = v.status === 'active' ? 'paused' : 'active';
-    updateVideo(v.id, { status: nextStatus });
+    setActionError(null);
+    const res = await updateVideo(v.id, { status: nextStatus });
+    if (!res.success) {
+      setActionError(res.error || `Failed to change status for "${v.title}"`);
+    } else {
+      setActionSuccess(`Task "${v.title}" is now ${nextStatus}.`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    }
+  };
+
+  const handleDelete = async (id: string, taskTitle: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${taskTitle}"? It will immediately disappear from user task lists.`)) {
+      return;
+    }
+    setActionError(null);
+    const res = await deleteVideo(id);
+    if (!res.success) {
+      setActionError(res.error || `Failed to delete task "${taskTitle}" from database`);
+    } else {
+      setActionSuccess(`Task "${taskTitle}" deleted successfully.`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    }
   };
 
   return (
@@ -108,6 +177,23 @@ export const AdminVideos: React.FC = () => {
           Add New Sponsored Video
         </Button>
       </div>
+
+      {actionError && (
+        <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold">Action Failed</p>
+            <p className="mt-0.5">{actionError}</p>
+          </div>
+        </div>
+      )}
+
+      {actionSuccess && (
+        <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-200 text-xs flex items-start gap-2.5">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <p className="font-medium">{actionSuccess}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {videos.map((v) => (
@@ -163,7 +249,7 @@ export const AdminVideos: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     className="text-rose-400 hover:text-rose-300 text-xs p-1.5"
-                    onClick={() => deleteVideo(v.id)}
+                    onClick={() => handleDelete(v.id, v.title)}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -204,18 +290,67 @@ export const AdminVideos: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Video MP4 URL"
+          {/* YouTube Embed Code / Video URL */}
+          <div className="space-y-2 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800">
+                YouTube Embed Code or Video URL
+              </label>
+              {parsedVideo.isYouTube && (
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  YouTube Verified ({parsedVideo.videoId})
+                </span>
+              )}
+            </div>
+
+            <textarea
+              rows={2}
               required
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder='Paste YouTube iframe embed code (<iframe ...>) or URL (https://www.youtube.com/watch?v=... / https://youtu.be/...)'
+              value={videoSourceInput}
+              onChange={(e) => handleSourceInputChange(e.target.value)}
+              className="w-full text-xs font-mono border border-slate-300 rounded-xl p-2.5 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+
+            {parsedVideo.error && videoSourceInput && (
+              <p className="text-[11px] text-rose-600 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                {parsedVideo.error}
+              </p>
+            )}
+
+            {parsedVideo.isYouTube && (
+              <div className="text-[11px] text-slate-500 bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-between">
+                <span className="truncate">
+                  Safe Canonical Embed: <code className="text-indigo-600 font-semibold">{parsedVideo.embedUrl}</code>
+                </span>
+                {parsedVideo.defaultThumbnailUrl && (
+                  <img
+                    src={parsedVideo.defaultThumbnailUrl}
+                    alt="YouTube Preview"
+                    className="w-14 h-9 object-cover rounded-lg shrink-0 border border-slate-200 ml-2"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Thumbnail Image URL"
               required
+              placeholder="Auto-filled from YouTube or enter image URL"
               value={thumbnailUrl}
               onChange={(e) => setThumbnailUrl(e.target.value)}
+            />
+            <Input
+              label="Direct Video URL (Resolved)"
+              required
+              readOnly={parsedVideo.isYouTube}
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              className={parsedVideo.isYouTube ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : ''}
             />
           </div>
 
@@ -266,7 +401,14 @@ export const AdminVideos: React.FC = () => {
             />
           </div>
 
-          <Button type="submit" variant="primary" className="w-full" size="md">
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full"
+            size="md"
+            isLoading={isSubmitting}
+            disabled={isSubmitting}
+          >
             {editingVideo ? 'Update Video Task' : 'Deploy Video Task'}
           </Button>
         </form>

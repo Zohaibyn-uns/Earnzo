@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Lock,
@@ -15,9 +15,14 @@ import { usePlatform } from '../../context/PlatformContext';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
+import { ContentElementRenderer } from '../../components/content/ContentElementRenderer';
 
 export const WatchAndEarnPage: React.FC = () => {
-  const { videos, activePlan, hasActivePlan, membership, transactions } = usePlatform();
+  const { videos, activePlan, hasActivePlan, membership, transactions, completedVideoIdsToday, refetchData } = usePlatform();
+
+  useEffect(() => {
+    refetchData();
+  }, []);
 
   // If user has NO active plan: show locked state (Section 7 requirement)
   if (!hasActivePlan || !activePlan) {
@@ -73,6 +78,9 @@ export const WatchAndEarnPage: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* Dynamic Content Element: Watch & Earn Top */}
+      <ContentElementRenderer placement="earn_top" />
+
       {/* Active Plan Dashboard Header */}
       <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white shadow-xl space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -134,60 +142,107 @@ export const WatchAndEarnPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {videos.map((video) => (
-            <Card key={video.id} className="group hover:border-indigo-300 transition-all flex flex-col justify-between">
-              <div className="relative aspect-video bg-slate-900 overflow-hidden">
-                <img
-                  src={video.thumbnail_url}
-                  alt={video.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90"
-                />
-                <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  <span>{video.duration_seconds}s required</span>
+        {(() => {
+          const activeVideos = (videos || []).filter((v) => v.status === 'active');
+
+          if (activeVideos.length === 0) {
+            return (
+              <div className="p-12 text-center bg-slate-50 border border-dashed border-slate-200 rounded-3xl space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
+                  <PlayCircle className="w-6 h-6" />
                 </div>
-                <div className="absolute bottom-3 right-3 bg-emerald-600 text-white text-xs font-black px-2.5 py-1 rounded shadow">
-                  Rs. {taskReward.toFixed(2)}
-                </div>
+                <h3 className="text-base font-bold text-slate-800">No Sponsored Tasks Available Right Now</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  New active sponsored video tasks will appear here as soon as they are launched by partners and administrators.
+                </p>
               </div>
+            );
+          }
 
-              <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="flex items-center justify-between text-[10px] uppercase font-bold text-indigo-600 mb-1">
-                    <span>{video.category}</span>
-                    <Badge variant="neutral" size="sm">
-                      {video.sponsor_badge}
-                    </Badge>
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900 line-clamp-1 mt-1">
-                    {video.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
-                    {video.description}
-                  </p>
-                </div>
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {activeVideos.map((video) => {
+                const isCompletedToday = completedVideoIdsToday.includes(video.id);
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
-                    Duration: {video.duration_seconds}s
-                  </span>
-                  <Link to={`/dashboard/videos/${video.id}`}>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={tasksCompletedToday >= maxTasks}
-                      leftIcon={<PlayCircle className="w-4 h-4" />}
-                    >
-                      {tasksCompletedToday >= maxTasks ? 'Daily Limit Met' : 'Start Task'}
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                return (
+                  <Card key={video.id} className="group hover:border-indigo-300 transition-all flex flex-col justify-between">
+                    <div className="relative aspect-video bg-slate-900 overflow-hidden">
+                      <img
+                        src={video.thumbnail_url}
+                        alt={video.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90"
+                      />
+                      <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        <span>{video.duration_seconds}s required</span>
+                      </div>
+                      <div className="absolute bottom-3 right-3 bg-emerald-600 text-white text-xs font-black px-2.5 py-1 rounded shadow">
+                        Rs. {taskReward.toFixed(2)}
+                      </div>
+                    </div>
+
+                    <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] uppercase font-bold text-indigo-600 mb-1">
+                          <span>{video.category}</span>
+                          <Badge variant="neutral" size="sm">
+                            {video.sponsor_badge}
+                          </Badge>
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 line-clamp-1 mt-1">
+                          {video.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
+                          {video.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400">
+                          Duration: {video.duration_seconds}s
+                        </span>
+                        {isCompletedToday ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled
+                            leftIcon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                            className="border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed text-xs font-semibold"
+                          >
+                            Available Tomorrow
+                          </Button>
+                        ) : tasksCompletedToday >= maxTasks ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled
+                            className="border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed text-xs font-semibold"
+                          >
+                            Daily Limit Met
+                          </Button>
+                        ) : (
+                          <Link to={`/dashboard/videos/${video.id}`}>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              leftIcon={<PlayCircle className="w-4 h-4" />}
+                            >
+                              Start Task
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Dynamic Content Element: Watch & Earn Bottom */}
+      <ContentElementRenderer placement="earn_bottom" />
     </div>
   );
 };

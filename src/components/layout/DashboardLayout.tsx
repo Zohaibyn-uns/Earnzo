@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -16,12 +16,14 @@ import {
   X,
   ShieldCheck,
   Award,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlatform } from '../../context/PlatformContext';
 import { formatCurrency } from '../../lib/utils';
 import { Badge } from '../ui/Badge';
 import { DisplayAdUnit } from '../ads/DisplayAdUnit';
+import { WelcomeMessageModal } from '../common/WelcomeMessageModal';
 
 export const DashboardLayout: React.FC = () => {
   const { user, logout, switchRole, isAdmin } = useAuth();
@@ -30,6 +32,30 @@ export const DashboardLayout: React.FC = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const notificationRef = useRef<HTMLDivElement | null>(null);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-hide dropdowns on outside click/tap
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (notificationRef.current && !notificationRef.current.contains(target)) {
+        setShowNotifications(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(target)) {
+        setShowProfileMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
@@ -83,11 +109,17 @@ export const DashboardLayout: React.FC = () => {
             </Link>
 
             {/* Notifications Dropdown */}
-            <div className="relative">
+            <div
+              ref={notificationRef}
+              className="relative"
+              onMouseLeave={() => setShowNotifications(false)}
+            >
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
                 title="Notifications"
+                aria-label="Notifications"
+                aria-expanded={showNotifications}
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
@@ -140,15 +172,115 @@ export const DashboardLayout: React.FC = () => {
               </button>
             )}
 
-            {/* User Profile Pill */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-700 text-white flex items-center justify-center font-bold text-xs">
-                {user?.full_name?.charAt(0) || 'U'}
-              </div>
-              <div className="hidden md:flex flex-col text-left">
-                <span className="text-xs font-bold text-slate-900 leading-none">{user?.full_name}</span>
-                <span className="text-[10px] text-slate-400 mt-0.5">{user?.email}</span>
-              </div>
+            {/* Interactive User Profile Dropdown */}
+            <div ref={profileRef} className="relative pl-2 border-l border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none"
+                aria-expanded={showProfileMenu}
+                aria-label="User menu"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-700 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                  {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
+                </div>
+                <div className="hidden md:flex flex-col text-left">
+                  <span className="text-xs font-bold text-slate-900 leading-none">{user?.full_name}</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">{user?.email}</span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 p-2 py-2 space-y-1">
+                  {/* User info summary */}
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <p className="text-xs font-bold text-slate-900 truncate">{user?.full_name}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {hasActivePlan ? activePlan?.name : 'Free Tier'}
+                      </span>
+                      {isAdmin && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-50 text-amber-800 border border-amber-200">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Links */}
+                  <Link
+                    to="/dashboard/profile"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span>Profile</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard/membership"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <CreditCard className="w-4 h-4 text-slate-400" />
+                    <span>Membership</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard/wallet"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <Wallet className="w-4 h-4 text-slate-400" />
+                    <span>Wallet</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard/withdraw"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <ArrowUpRight className="w-4 h-4 text-slate-400" />
+                    <span>Withdraw</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard/referrals"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <Users className="w-4 h-4 text-slate-400" />
+                    <span>Referrals</span>
+                  </Link>
+
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setShowProfileMenu(false)}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-amber-500" />
+                      <span>Admin HQ</span>
+                    </Link>
+                  )}
+
+                  <div className="pt-1 border-t border-slate-100">
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        logout();
+                        navigate('/login');
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors text-left"
+                    >
+                      <LogOut className="w-4 h-4 text-rose-500" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -256,6 +388,7 @@ export const DashboardLayout: React.FC = () => {
           </div>
         </main>
       </div>
+      <WelcomeMessageModal />
     </div>
   );
 };

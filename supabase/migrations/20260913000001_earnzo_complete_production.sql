@@ -486,6 +486,13 @@ CREATE POLICY "Public read active campaigns" ON public.video_campaigns
 CREATE POLICY "Admins manage campaigns" ON public.video_campaigns
   FOR ALL USING (public.is_admin(auth.uid()));
 
+CREATE POLICY "Public read active videos" ON public.videos
+  FOR SELECT USING (status = 'active' OR public.is_admin(auth.uid()));
+
+CREATE POLICY "Admins manage videos" ON public.videos
+  FOR ALL USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
+
 -- Watch Sessions Policies
 CREATE POLICY "Users read own watch sessions" ON public.video_watch_sessions
   FOR SELECT USING (auth.uid() = user_id OR public.is_admin(auth.uid()));

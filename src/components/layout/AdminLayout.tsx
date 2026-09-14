@@ -21,6 +21,7 @@ import {
   Eye,
   LayoutDashboard,
   Compass,
+  LayoutTemplate,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlatform } from '../../context/PlatformContext';
@@ -58,6 +59,7 @@ export const AdminLayout: React.FC = () => {
     },
     { name: 'Ledger Transactions', href: '/admin/transactions', icon: History },
     { name: 'Third-Party Ads', href: '/admin/advertisements', icon: Compass },
+    { name: 'Website Content', href: '/admin/content', icon: LayoutTemplate },
     { name: 'Referral Engine', href: '/admin/referrals', icon: Users },
     { name: 'Analytics & Reports', href: '/admin/reports', icon: FileBarChart },
     { name: 'Broadcast Bulletins', href: '/admin/announcements', icon: Megaphone },

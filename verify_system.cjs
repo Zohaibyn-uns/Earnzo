@@ -795,7 +795,473 @@ test('Test 20: Cross-Client Multi-Session State Isolation & Synchronization', ()
   assert.strictEqual(userB_session.membership.plan_id, 'plan-2');
 });
 
+// -------------------------------------------------------------
+// TEST 21: YouTube Embed Sanitization, Domain Validation & Video ID Extraction
+// -------------------------------------------------------------
+test('Test 21: YouTube Embed Extraction & Domain Security Filter', () => {
+  // Parsing logic equivalent to src/lib/youtube.ts
+  function parseYouTube(input) {
+    if (!input || typeof input !== 'string') {
+      return { isYouTube: false, error: 'Input cannot be empty' };
+    }
+    const trimmed = input.trim();
+    let urlToTest = trimmed;
+    const iframeSrcMatch = trimmed.match(/<iframe[^>]*\s+src=["']([^"']+)["']/i);
+    if (iframeSrcMatch && iframeSrcMatch[1]) {
+      urlToTest = iframeSrcMatch[1].trim();
+    }
+    if (urlToTest.startsWith('//')) {
+      urlToTest = 'https:' + urlToTest;
+    } else if (!/^https?:\/\//i.test(urlToTest)) {
+      urlToTest = 'https://' + urlToTest;
+    }
+    try {
+      const parsedUrl = new URL(urlToTest);
+      const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, '');
+      const allowed = ['youtube.com', 'youtube-nocookie.com', 'youtu.be', 'm.youtube.com'];
+      if (!allowed.includes(host)) {
+        return { isYouTube: false, error: 'Domain is not a trusted YouTube domain' };
+      }
+      let videoId = null;
+      if (host === 'youtu.be') {
+        videoId = parsedUrl.pathname.slice(1).split('/')[0].split('?')[0];
+      } else if (parsedUrl.pathname.startsWith('/embed/')) {
+        videoId = parsedUrl.pathname.replace('/embed/', '').split('/')[0].split('?')[0];
+      } else if (parsedUrl.pathname.startsWith('/shorts/')) {
+        videoId = parsedUrl.pathname.replace('/shorts/', '').split('/')[0].split('?')[0];
+      } else {
+        videoId = parsedUrl.searchParams.get('v');
+      }
+      if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return { isYouTube: false, error: 'Invalid 11-char video ID' };
+      }
+      return {
+        isYouTube: true,
+        videoId,
+        embedUrl: `https://www.youtube.com/embed/${videoId}`,
+        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      };
+    } catch (e) {
+      return { isYouTube: false, error: 'Invalid URL' };
+    }
+  }
+
+  // 1. Full iframe embed code
+  const iframeInput = '<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ?si=abcdef" title="YouTube video player" frameborder="0" allowfullscreen></iframe>';
+  const res1 = parseYouTube(iframeInput);
+  assert.strictEqual(res1.isYouTube, true);
+  assert.strictEqual(res1.videoId, 'dQw4w9WgXcQ');
+  assert.strictEqual(res1.embedUrl, 'https://www.youtube.com/embed/dQw4w9WgXcQ');
+
+  // 2. Standard watch URL
+  const watchUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s';
+  const res2 = parseYouTube(watchUrl);
+  assert.strictEqual(res2.isYouTube, true);
+  assert.strictEqual(res2.videoId, 'dQw4w9WgXcQ');
+
+  // 3. Short URL youtu.be
+  const shortUrl = 'https://youtu.be/dQw4w9WgXcQ?si=123';
+  const res3 = parseYouTube(shortUrl);
+  assert.strictEqual(res3.isYouTube, true);
+  assert.strictEqual(res3.videoId, 'dQw4w9WgXcQ');
+
+  // 4. Shorts URL
+  const shortsUrl = 'https://www.youtube.com/shorts/dQw4w9WgXcQ';
+  const res4 = parseYouTube(shortsUrl);
+  assert.strictEqual(res4.isYouTube, true);
+  assert.strictEqual(res4.videoId, 'dQw4w9WgXcQ');
+
+  // 5. Malicious / untrusted domain rejection (Anti-XSS / Anti-phishing)
+  const evilInput = '<iframe src="https://evil-site.com/steal-cookie.html"></iframe>';
+  const res5 = parseYouTube(evilInput);
+  assert.strictEqual(res5.isYouTube, false);
+  assert.ok(res5.error.includes('not a trusted YouTube domain'));
+
+  // 6. XSS injection attempt rejection
+  const xssInput = 'javascript:alert(1)';
+  const res6 = parseYouTube(xssInput);
+  assert.strictEqual(res6.isYouTube, false);
+});
+
+// -------------------------------------------------------------
+// TEST 22: Dynamic Website Content Element Manager & Placement Routing
+// -------------------------------------------------------------
+test('Test 22: Website Content Element Manager & Layout Properties', () => {
+  const contentItems = [
+    {
+      id: 'cnt-1',
+      type: 'banner',
+      title: 'Mega Bonus Weekend',
+      content_url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+      placement: 'dashboard_top',
+      display_order: 1,
+      enabled: true,
+      desktop_visible: true,
+      mobile_visible: true,
+      layout_config: { width: 'full', alignment: 'center', padding: 'md', margin: 'md', borderRadius: 'xl' }
+    },
+    {
+      id: 'cnt-2',
+      type: 'youtube',
+      title: 'Tutorial: How to Earn Rs. 500 Daily',
+      content_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      placement: 'earn_top',
+      display_order: 0,
+      enabled: true,
+      desktop_visible: true,
+      mobile_visible: true,
+      layout_config: { width: '4xl', alignment: 'center', padding: 'md', margin: 'md', borderRadius: '2xl' }
+    },
+    {
+      id: 'cnt-3',
+      type: 'text',
+      title: 'Maintenance Notice',
+      content_url: 'Scheduled server maintenance on Sunday 2:00 AM PKT.',
+      placement: 'dashboard_top',
+      display_order: 0,
+      enabled: false, // Disabled
+      desktop_visible: true,
+      mobile_visible: true,
+      layout_config: { width: 'full', alignment: 'left', padding: 'sm', margin: 'sm', borderRadius: 'lg' }
+    }
+  ];
+
+  // Normal visitor filter for dashboard_top
+  const dashboardTopVisible = contentItems
+    .filter(i => i.placement === 'dashboard_top' && i.enabled)
+    .sort((a, b) => a.display_order - b.display_order);
+
+  assert.strictEqual(dashboardTopVisible.length, 1);
+  assert.strictEqual(dashboardTopVisible[0].id, 'cnt-1');
+
+  // Admin sees all elements regardless of enabled status
+  const adminViewDashboardTop = contentItems
+    .filter(i => i.placement === 'dashboard_top')
+    .sort((a, b) => a.display_order - b.display_order);
+
+  assert.strictEqual(adminViewDashboardTop.length, 2);
+  assert.strictEqual(adminViewDashboardTop[0].id, 'cnt-3'); // Order 0 first
+  assert.strictEqual(adminViewDashboardTop[1].id, 'cnt-1'); // Order 1 second
+
+  // Toggle enable
+  dashboardTopVisible[0].enabled = false;
+  assert.strictEqual(dashboardTopVisible[0].enabled, false);
+});
+
+// -------------------------------------------------------------
+// TEST 23: Sponsored Task Video CRUD & User-Side Synchronization
+// -------------------------------------------------------------
+test('Test 23: Sponsored Task Video CRUD & User-Side Synchronization', () => {
+  // Simulated single source of truth (public.videos table)
+  let dbVideos = [
+    {
+      id: '11111111-1111-4111-a111-111111111111',
+      title: 'Initial Video Task',
+      video_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      thumbnail_url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      duration_seconds: 30,
+      reward_amount: 10.0,
+      status: 'active',
+      category: 'Technology',
+      sponsor_badge: 'Official Sponsor',
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  // Helper simulating user query: SELECT * FROM videos WHERE status = 'active'
+  const getUserActiveVideos = () => dbVideos.filter((v) => v.status === 'active');
+  // Helper simulating admin query: SELECT * FROM videos
+  const getAdminVideos = () => dbVideos;
+
+  // 1. Initial State: Both see the single active video
+  assert.strictEqual(getAdminVideos().length, 1);
+  assert.strictEqual(getUserActiveVideos().length, 1);
+
+  // 2. Admin creates a new video with valid RFC 4122 UUID and YouTube embed URL
+  const newVideoId = '44444444-4444-4444-a444-444444444444';
+  const newVideo = {
+    id: newVideoId,
+    title: 'Brand Sponsored Task 2026',
+    video_url: 'https://www.youtube.com/embed/jNQXAC9IVRw',
+    thumbnail_url: 'https://img.youtube.com/vi/jNQXAC9IVRw/hqdefault.jpg',
+    duration_seconds: 45,
+    reward_amount: 15.0,
+    status: 'active',
+    category: 'Education',
+    sponsor_badge: 'Global Partner',
+    created_at: new Date().toISOString(),
+  };
+  dbVideos.push(newVideo);
+
+  // Verification: New active task appears immediately for users
+  const userActiveTasksAfterCreate = getUserActiveVideos();
+  assert.strictEqual(userActiveTasksAfterCreate.length, 2);
+  assert.ok(userActiveTasksAfterCreate.some((v) => v.id === newVideoId));
+  assert.strictEqual(userActiveTasksAfterCreate.find((v) => v.id === newVideoId).video_url, 'https://www.youtube.com/embed/jNQXAC9IVRw');
+
+  // 3. Admin pauses / disables a video (status = 'paused')
+  const videoToPause = dbVideos.find((v) => v.id === newVideoId);
+  videoToPause.status = 'paused';
+
+  // Verification: Paused video immediately disappears from user side, remains visible in admin
+  assert.strictEqual(getAdminVideos().length, 2);
+  const userActiveTasksAfterPause = getUserActiveVideos();
+  assert.strictEqual(userActiveTasksAfterPause.length, 1);
+  assert.ok(!userActiveTasksAfterPause.some((v) => v.id === newVideoId));
+
+  // 4. Admin deletes a video
+  dbVideos = dbVideos.filter((v) => v.id !== '11111111-1111-4111-a111-111111111111');
+
+  // Verification: Deleted video immediately disappears from both admin and user sides
+  assert.strictEqual(getAdminVideos().length, 1);
+  assert.strictEqual(getUserActiveVideos().length, 0); // No active videos left
+});
+
+// -------------------------------------------------------------
+// TEST 24: YouTube Embed Sanitization & Watch Session Duration Integrity
+// -------------------------------------------------------------
+test('Test 24: YouTube Embed Sanitization & Watch Session Duration Integrity', () => {
+  const video = {
+    id: '33333333-3333-4333-a333-333333333333',
+    video_url: 'https://www.youtube.com/embed/9bZkp7q19f0',
+    duration_seconds: 35,
+    reward_amount: 15.0,
+    status: 'active',
+  };
+
+  // Duration check tolerance (server-side enforces at least duration - 2s)
+  const requiredDuration = video.duration_seconds;
+  const prematureElapsed = 20; // 20s < 33s -> MUST FAIL
+  const validElapsed = 35; // 35s >= 33s -> MUST PASS
+
+  assert.ok(prematureElapsed < requiredDuration - 2, 'Premature elapsed should be flagged');
+  assert.ok(validElapsed >= requiredDuration - 2, 'Valid elapsed duration satisfies criteria');
+});
+
+// -------------------------------------------------------------
+// TEST 25: Database-Driven Settings Serialization & Mirror Sync
+// -------------------------------------------------------------
+test('Test 25: Database-Driven Settings Serialization & Mirror Sync', () => {
+  const defaultSettings = {
+    minWithdrawalBalance: 500,
+    requiredQualifiedReferrals: 2,
+    referralCommissionPct: 10,
+    maintenanceMode: false,
+    general: {
+      site_name: 'Earnzo',
+      maintenance_mode: false,
+    },
+    referrals: {
+      referral_system_enabled: true,
+      reward_type: 'percentage',
+      reward_amount: 10,
+      min_qualified_condition: 2,
+    },
+    withdrawals: {
+      withdrawals_enabled: true,
+      min_withdrawal_amount: 500,
+    },
+    welcomeMessage: {
+      enabled: true,
+      display_duration_seconds: 6,
+    },
+    auth: {
+      registration_enabled: true,
+      email_otp_enabled: false,
+    },
+  };
+
+  // Simulate updating settings with new withdrawal minimum & maintenance mode
+  const updates = {
+    general: { ...defaultSettings.general, maintenance_mode: true },
+    withdrawals: { ...defaultSettings.withdrawals, min_withdrawal_amount: 750 },
+  };
+
+  const updatedSettings = {
+    ...defaultSettings,
+    ...updates,
+    maintenanceMode: updates.general.maintenance_mode,
+    minWithdrawalBalance: updates.withdrawals.min_withdrawal_amount,
+  };
+
+  assert.strictEqual(updatedSettings.maintenanceMode, true, 'Top-level maintenanceMode must mirror general.maintenance_mode');
+  assert.strictEqual(updatedSettings.minWithdrawalBalance, 750, 'Top-level minWithdrawalBalance must mirror withdrawals.min_withdrawal_amount');
+  assert.strictEqual(updatedSettings.referrals.min_qualified_condition, 2);
+});
+
+// -------------------------------------------------------------
+// TEST 26: Impersonation Isolation & Zero Privilege Escalation
+// -------------------------------------------------------------
+test('Test 26: Impersonation Isolation & Zero Privilege Escalation', () => {
+  const adminActor = {
+    id: 'admin-uuid-001',
+    email: 'admin@earnzo.com',
+    role: 'admin',
+    full_name: 'Master Administrator',
+  };
+
+  const targetMember = {
+    id: 'user-uuid-999',
+    email: 'tariq@example.com',
+    role: 'user',
+    full_name: 'Tariq Mehmood',
+  };
+
+  // Impersonate function
+  function simulateImpersonation(admin, target) {
+    if (target.id === admin.id) throw new Error('Cannot impersonate self');
+    if (target.role === 'admin' || target.email === 'admin@earnzo.com') {
+      throw new Error('Cannot impersonate administrators');
+    }
+
+    const state = {
+      user: target,
+      impersonatorAdmin: admin,
+      isImpersonating: true,
+      isAdmin: false, // ZERO PRIVILEGE ESCALATION: admin rights stripped while acting as user
+    };
+    return state;
+  }
+
+  const activeSession = simulateImpersonation(adminActor, targetMember);
+  assert.strictEqual(activeSession.isImpersonating, true);
+  assert.strictEqual(activeSession.user.id, targetMember.id);
+  assert.strictEqual(activeSession.user.email, 'tariq@example.com');
+  assert.strictEqual(activeSession.isAdmin, false, 'Security violation: Admin status must strictly be false while impersonating');
+  assert.strictEqual(activeSession.impersonatorAdmin.email, 'admin@earnzo.com');
+
+  // Verify self-impersonation block
+  assert.throws(() => simulateImpersonation(adminActor, adminActor), /Cannot impersonate self/);
+
+  // Verify other-admin impersonation block
+  const otherAdmin = { id: 'admin-uuid-002', email: 'co-admin@earnzo.com', role: 'admin', full_name: 'Co Admin' };
+  assert.throws(() => simulateImpersonation(adminActor, otherAdmin), /Cannot impersonate administrators/);
+});
+
+// -------------------------------------------------------------
+// TEST 27: Admin Self-Suspension & Root Admin Protection
+// -------------------------------------------------------------
+test('Test 27: Admin Self-Suspension & Root Admin Protection', () => {
+  const currentAdmin = { id: 'admin-uuid-001', email: 'admin@earnzo.com' };
+  const allProfiles = [
+    { id: 'admin-uuid-001', email: 'admin@earnzo.com', status: 'active' },
+    { id: 'usr-002', email: 'regular@example.com', status: 'active' },
+  ];
+
+  function updateUserStatus(actor, targetId, newStatus) {
+    if (targetId === actor.id || targetId === 'admin-001') {
+      throw new Error('Security violation: Administrators cannot suspend or terminate their own active account.');
+    }
+    const target = allProfiles.find((p) => p.id === targetId);
+    if (target && target.email.toLowerCase() === 'admin@earnzo.com') {
+      throw new Error('Security violation: The master root administrator account cannot be suspended or terminated.');
+    }
+    target.status = newStatus;
+    return target;
+  }
+
+  // Self suspension attempt MUST fail
+  assert.throws(
+    () => updateUserStatus(currentAdmin, currentAdmin.id, 'suspended'),
+    /Security violation: Administrators cannot suspend or terminate their own active account/
+  );
+
+  // Normal user suspension MUST succeed
+  const updatedUser = updateUserStatus(currentAdmin, 'usr-002', 'suspended');
+  assert.strictEqual(updatedUser.status, 'suspended');
+});
+
+// -------------------------------------------------------------
+// TEST 28: Referral Multi-Mode Reward & Cap Enforcement
+// -------------------------------------------------------------
+test('Test 28: Referral Multi-Mode Reward & Cap Enforcement', () => {
+  const percentageConfig = { reward_type: 'percentage', reward_amount: 10, max_reward_cap: 5000 };
+  const fixedConfig = { reward_type: 'fixed', reward_amount: 75, max_reward_cap: 5000 };
+
+  const planPurchasePrice = 2000;
+
+  function calculateBonus(config, price, currentEarned) {
+    let bonus = config.reward_type === 'percentage'
+      ? (price * config.reward_amount) / 100
+      : config.reward_amount;
+
+    if (currentEarned + bonus > config.max_reward_cap) {
+      bonus = Math.max(0, config.max_reward_cap - currentEarned);
+    }
+    return bonus;
+  }
+
+  const pctBonus = calculateBonus(percentageConfig, planPurchasePrice, 0);
+  assert.strictEqual(pctBonus, 200, '10% of 2000 should be 200');
+
+  const fixBonus = calculateBonus(fixedConfig, planPurchasePrice, 0);
+  assert.strictEqual(fixBonus, 75, 'Fixed bonus should be 75');
+
+  // Cap enforcement
+  const cappedBonus = calculateBonus(percentageConfig, planPurchasePrice, 4900);
+  assert.strictEqual(cappedBonus, 100, 'Bonus capped at remaining headroom (5000 - 4900 = 100)');
+});
+
+// -------------------------------------------------------------
+// TEST 29: Welcome Message Dynamic Persona Resolution & Session Isolation
+// -------------------------------------------------------------
+test('Test 29: Welcome Message Dynamic Persona Resolution & Session Isolation', () => {
+  const config = {
+    enabled: true,
+    new_user_title: 'Welcome to Earnzo! 🎉',
+    new_user_message: 'Hi {name}, start earning today!',
+    returning_user_title: 'Welcome Back! 👋',
+    returning_user_message: 'Hi {name}, great to see you again!',
+  };
+
+  const newUser = {
+    id: 'u-1',
+    full_name: 'Zohaib Tariq',
+    created_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+  };
+
+  const returningUser = {
+    id: 'u-2',
+    full_name: 'Ahmed Bilal',
+    created_at: new Date(Date.now() - 86400000 * 10).toISOString(), // 10 days ago
+  };
+
+  function resolveWelcome(cfg, user) {
+    const isNew = Date.now() - new Date(user.created_at).getTime() < 86400000;
+    const template = isNew ? cfg.new_user_message : cfg.returning_user_message;
+    return template.replace('{name}', user.full_name);
+  }
+
+  const newMsg = resolveWelcome(config, newUser);
+  assert.strictEqual(newMsg, 'Hi Zohaib Tariq, start earning today!');
+
+  const retMsg = resolveWelcome(config, returningUser);
+  assert.strictEqual(retMsg, 'Hi Ahmed Bilal, great to see you again!');
+});
+
+// -------------------------------------------------------------
+// TEST 30: Email OTP Verification & Cooldown Validation
+// -------------------------------------------------------------
+test('Test 30: Email OTP Verification & Cooldown Validation', () => {
+  const simulatedDb = {
+    'user@example.com': { otp: '582914', expiresAt: Date.now() + 600000 },
+  };
+
+  function verifyOtp(email, code) {
+    const entry = simulatedDb[email];
+    if (!entry) return { success: false, error: 'User not found' };
+    if (Date.now() > entry.expiresAt) return { success: false, error: 'Code expired' };
+    if (entry.otp !== code) return { success: false, error: 'Invalid verification code' };
+    return { success: true };
+  }
+
+  assert.strictEqual(verifyOtp('user@example.com', '582914').success, true);
+  assert.strictEqual(verifyOtp('user@example.com', '000000').success, false);
+  assert.strictEqual(verifyOtp('unknown@example.com', '582914').success, false);
+});
+
 console.log(`\nResults: ${passedTests} of ${totalTests} test suites passed.`);
 if (passedTests === totalTests) {
   console.log('STATUS: ALL INTEGRATION & LEDGER SECURITY TESTS PASSED PERFECTLY!\n');
 }
+

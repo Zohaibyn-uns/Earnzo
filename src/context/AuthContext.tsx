@@ -8,6 +8,8 @@ interface AuthContextType {
   role: UserRole;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isImpersonating: boolean;
+  impersonatorAdmin: Profile | null;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: {
     fullName: string;
@@ -15,7 +17,11 @@ interface AuthContextType {
     phone: string;
     password?: string;
     referralCode?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; error?: string; requireOtp?: boolean }>;
+  verifyEmailOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
+  resendEmailOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
+  impersonateUser: (targetUser: Profile) => Promise<{ success: boolean; error?: string }>;
+  exitImpersonation: () => void;
   logout: () => void;
   switchRole: (role: 'user' | 'admin') => void;
   updateProfile: (data: Partial<Profile>) => void;
@@ -24,6 +30,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'watchearn_active_user_v3';
+const IMPERSONATOR_STORAGE_KEY = 'earnzo_impersonator_admin_v3';
 
 export const isValidUUID = (id?: string | null): boolean => {
   if (!id) return false;
@@ -31,6 +38,18 @@ export const isValidUUID = (id?: string | null): boolean => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [impersonatorAdmin, setImpersonatorAdmin] = useState<Profile | null>(() => {
+    const saved = sessionStorage.getItem(IMPERSONATOR_STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+
   const [user, setUser] = useState<Profile | null>(() => {
     const saved = localStorage.getItem(AUTH_STORAGE_KEY);
     if (saved) {
@@ -53,6 +72,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
+  const syncUserFromSession = async (sessionUser: any) => {
+    if (!sessionUser || !isValidUUID(sessionUser.id)) {
+      setUser(null);
+      return;
+    }
+
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', sessionUser.id)
+        .maybeSingle();
+
+      const isDesignatedAdminEmail = (email?: string | null) =>
+        Boolean(email && (email.toLowerCase() === 'admin@earnzo.com' || email.toLowerCase().endsWith('@earnzo.com')));
+
+      if (profile) {
+        if (isDesignatedAdminEmail(profile.email) && profile.role !== 'admin') {
+          setUser({ ...profile, role: 'admin' });
+        } else {
+          setUser(profile);
+        }
+      } else {
+        // Construct profile using real Supabase Auth UUID while DB trigger finalizes
+        const effectiveRole = isDesignatedAdminEmail(sessionUser.email)
+          ? 'admin'
+          : ((sessionUser.user_metadata?.role as any) || 'user');
+
+        setUser({
+          id: sessionUser.id,
+          email: sessionUser.email || '',
+          full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'Member',
+          phone: sessionUser.user_metadata?.phone || '',
+          role: effectiveRole,
+          status: 'active',
+          referral_code: sessionUser.user_metadata?.referral_code || '',
+          created_at: sessionUser.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load profile for Supabase user:', err);
+    }
+  };
+
   // Supabase Auth Session Synchronization
   useEffect(() => {
     if (!isLiveSupabaseConfigured) return;
@@ -70,51 +134,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem(AUTH_STORAGE_KEY);
       }
     }
-
-    const syncUserFromSession = async (sessionUser: any) => {
-      if (!sessionUser || !isValidUUID(sessionUser.id)) {
-        setUser(null);
-        return;
-      }
-
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', sessionUser.id)
-          .maybeSingle();
-
-        const isDesignatedAdminEmail = (email?: string | null) =>
-          Boolean(email && (email.toLowerCase() === 'admin@earnzo.com' || email.toLowerCase().endsWith('@earnzo.com')));
-
-        if (profile) {
-          if (isDesignatedAdminEmail(profile.email) && profile.role !== 'admin') {
-            setUser({ ...profile, role: 'admin' });
-          } else {
-            setUser(profile);
-          }
-        } else {
-          // Construct profile using real Supabase Auth UUID while DB trigger finalizes
-          const effectiveRole = isDesignatedAdminEmail(sessionUser.email)
-            ? 'admin'
-            : ((sessionUser.user_metadata?.role as any) || 'user');
-
-          setUser({
-            id: sessionUser.id,
-            email: sessionUser.email || '',
-            full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'Member',
-            phone: sessionUser.user_metadata?.phone || '',
-            role: effectiveRole,
-            status: 'active',
-            referral_code: sessionUser.user_metadata?.referral_code || '',
-            created_at: sessionUser.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load profile for Supabase user:', err);
-      }
-    };
 
     // 1. Initial Session Check on app mount
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -137,6 +156,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscription.unsubscribe();
     };
   }, []);
+
+  // Realtime profile listener (Catches admin suspend/terminate/role changes instantly)
+  useEffect(() => {
+    if (!isLiveSupabaseConfigured || !user?.id || !isValidUUID(user.id)) return;
+
+    const channel = supabase
+      .channel(`earnzo-profile-status-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        (payload: any) => {
+          if (payload?.new) {
+            setUser((prev) => (prev ? { ...prev, ...payload.new } : (payload.new as Profile)));
+          }
+        }
+      )
+      .subscribe();
+
+    const checkProfile = async () => {
+      try {
+        const { data: latestProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (latestProfile) {
+          setUser((prev) => {
+            if (!prev) return latestProfile;
+            if (prev.status !== latestProfile.status || prev.role !== latestProfile.role) {
+              return { ...prev, ...latestProfile };
+            }
+            return prev;
+          });
+        }
+      } catch (e) {
+        // silent
+      }
+    };
+
+    window.addEventListener('focus', checkProfile);
+
+    return () => {
+      window.removeEventListener('focus', checkProfile);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (user) {
@@ -216,7 +286,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     phone: string;
     password?: string;
     referralCode?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
+  }): Promise<{ success: boolean; error?: string; requireOtp?: boolean }> => {
     if (isLiveSupabaseConfigured) {
       if (!data.password) {
         return { success: false, error: 'Password is required to register.' };
@@ -234,9 +304,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         });
         if (error) return { success: false, error: error.message };
+
         if (authData.user) {
+          const hasSession = Boolean(authData.session);
           const newProfile: Profile = {
-            id: authData.user.id, // REAL Supabase Auth UUID!
+            id: authData.user.id,
             email: data.email,
             full_name: data.fullName,
             phone: data.phone,
@@ -246,8 +318,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             created_at: authData.user.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
-          setUser(newProfile);
-          return { success: true };
+
+          if (hasSession) {
+            setUser(newProfile);
+          }
+
+          // If no immediate session returned by Supabase, email OTP/confirmation is required
+          return { success: true, requireOtp: !hasSession };
         }
       } catch (err: any) {
         return { success: false, error: err.message || 'Registration failed' };
@@ -268,15 +345,162 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_at: new Date().toISOString(),
     };
     setUser(newProfile);
+    return { success: true, requireOtp: false };
+  };
+
+  // Verify Email OTP
+  const verifyEmailOtp = async (email: string, token: string): Promise<{ success: boolean; error?: string }> => {
+    if (isLiveSupabaseConfigured) {
+      try {
+        const cleanToken = token.trim();
+        const { data, error } = await supabase.auth.verifyOtp({
+          email,
+          token: cleanToken,
+          type: 'signup',
+        });
+
+        if (error) {
+          // Fallback to type 'email'
+          const retry = await supabase.auth.verifyOtp({
+            email,
+            token: cleanToken,
+            type: 'email',
+          });
+          if (retry.error) {
+            return { success: false, error: retry.error.message || error.message };
+          }
+          if (retry.data?.user) {
+            await syncUserFromSession(retry.data.user);
+            return { success: true };
+          }
+        }
+
+        if (data?.user) {
+          await syncUserFromSession(data.user);
+          return { success: true };
+        }
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'OTP verification failed' };
+      }
+    }
+
+    // Offline sandbox verification
+    if (token.trim().length >= 4) {
+      return { success: true };
+    }
+    return { success: false, error: 'Invalid verification code. Please enter valid digits.' };
+  };
+
+  // Resend Email OTP
+  const resendEmailOtp = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email,
+        });
+        if (error) return { success: false, error: error.message };
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Failed to resend code' };
+      }
+    }
     return { success: true };
   };
 
+  // Impersonate User ("Login as User")
+  const impersonateUser = async (targetUser: Profile): Promise<{ success: boolean; error?: string }> => {
+    const isActorAdmin =
+      user?.role === 'admin' ||
+      user?.role === 'manager' ||
+      user?.email?.toLowerCase() === 'admin@earnzo.com' ||
+      Boolean(user?.email?.toLowerCase().endsWith('@earnzo.com'));
+
+    if (!isActorAdmin) {
+      return { success: false, error: 'Unauthorized: Only platform administrators can enter user view mode.' };
+    }
+
+    if (targetUser.id === user?.id) {
+      return { success: false, error: 'Cannot impersonate yourself.' };
+    }
+
+    if (
+      targetUser.role === 'admin' ||
+      targetUser.email.toLowerCase() === 'admin@earnzo.com' ||
+      targetUser.email.toLowerCase().endsWith('@earnzo.com')
+    ) {
+      return { success: false, error: 'Security restriction: Cannot impersonate administrative accounts.' };
+    }
+
+    const currentAdmin = user;
+    if (!currentAdmin) {
+      return { success: false, error: 'Administrator authentication required.' };
+    }
+    sessionStorage.setItem(IMPERSONATOR_STORAGE_KEY, JSON.stringify(currentAdmin));
+    setImpersonatorAdmin(currentAdmin);
+    setUser(targetUser);
+
+    // Record immutable audit log in database
+    if (isLiveSupabaseConfigured) {
+      supabase.from('audit_logs').insert({
+        actor_id: currentAdmin.id,
+        actor_email: currentAdmin.email,
+        action: 'admin_impersonate_user',
+        entity: 'profiles',
+        entity_id: targetUser.id,
+        details: {
+          admin_id: currentAdmin.id,
+          admin_email: currentAdmin.email,
+          target_user_id: targetUser.id,
+          target_user_email: targetUser.email,
+          started_at: new Date().toISOString(),
+        },
+      }).then(() => {});
+    }
+
+    return { success: true };
+  };
+
+  // Exit Impersonation Mode
+  const exitImpersonation = () => {
+    if (!impersonatorAdmin) return;
+    const admin = impersonatorAdmin;
+    const targetUserId = user?.id;
+
+    if (isLiveSupabaseConfigured) {
+      supabase.from('audit_logs').insert({
+        actor_id: admin.id,
+        actor_email: admin.email,
+        action: 'admin_exit_impersonation',
+        entity: 'profiles',
+        entity_id: targetUserId,
+        details: {
+          admin_id: admin.id,
+          admin_email: admin.email,
+          target_user_id: targetUserId,
+          ended_at: new Date().toISOString(),
+        },
+      }).then(() => {});
+    }
+
+    sessionStorage.removeItem(IMPERSONATOR_STORAGE_KEY);
+    setUser(admin);
+    setImpersonatorAdmin(null);
+  };
+
   const logout = () => {
+    if (impersonatorAdmin) {
+      exitImpersonation();
+      return;
+    }
     if (isLiveSupabaseConfigured) {
       supabase.auth.signOut().catch(() => {});
     }
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    sessionStorage.removeItem(IMPERSONATOR_STORAGE_KEY);
     setUser(null);
+    setImpersonatorAdmin(null);
   };
 
   const switchRole = (role: 'user' | 'admin') => {
@@ -306,12 +530,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: user?.role || 'user',
         isAuthenticated: !!user,
         isAdmin:
-          user?.role === 'admin' ||
-          user?.role === 'manager' ||
-          user?.email?.toLowerCase() === 'admin@earnzo.com' ||
-          Boolean(user?.email?.toLowerCase().endsWith('@earnzo.com')),
+          !impersonatorAdmin && (
+            user?.role === 'admin' ||
+            user?.role === 'manager' ||
+            user?.email?.toLowerCase() === 'admin@earnzo.com' ||
+            Boolean(user?.email?.toLowerCase().endsWith('@earnzo.com'))
+          ),
+        isImpersonating: Boolean(impersonatorAdmin),
+        impersonatorAdmin,
         login,
         register,
+        verifyEmailOtp,
+        resendEmailOtp,
+        impersonateUser,
+        exitImpersonation,
         logout,
         switchRole,
         updateProfile,

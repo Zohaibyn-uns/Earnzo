@@ -259,7 +259,75 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface ReferralSettings {
+  referrals_enabled?: boolean;
+  rewards_enabled?: boolean;
+  reward_type: 'percentage' | 'fixed';
+  reward_value?: number;
+  reward_amount?: number;
+  min_qualified_referrals?: number;
+  min_qualified_condition?: number;
+  max_reward_cap: number;
+  earning_enabled?: boolean;
+  referral_system_enabled?: boolean;
+  referral_rewards_enabled?: boolean;
+  referral_earnings_enabled?: boolean;
+}
+
+export interface WithdrawalSettings {
+  withdrawals_enabled: boolean;
+  min_withdrawal?: number;
+  max_withdrawal?: number;
+  min_withdrawal_amount?: number;
+  max_withdrawal_amount?: number;
+  processing_fee_pct?: number;
+  withdrawal_fee_pct?: number;
+  allowed_methods?: {
+    jazzcash: boolean;
+    easypaisa: boolean;
+    bank: boolean;
+  };
+  processing_notice?: string;
+  jazzcash_enabled?: boolean;
+  easypaisa_enabled?: boolean;
+  bank_enabled?: boolean;
+  jazzcash_title?: string;
+  jazzcash_number?: string;
+  easypaisa_title?: string;
+  easypaisa_number?: string;
+  bank_iban?: string;
+  bank_name?: string;
+}
+
+export interface WelcomeMessageSettings {
+  enabled: boolean;
+  new_user_title?: string;
+  new_user_message: string;
+  returning_user_title?: string;
+  returning_user_message: string;
+  display_duration_seconds: number;
+}
+
+export interface GeneralSettings {
+  site_name: string;
+  site_description: string;
+  maintenance_mode: boolean;
+  currency: string;
+  currency_symbol?: string;
+  timezone: string;
+  support_email: string;
+  support_phone: string;
+  general_announcement?: string;
+}
+
+export interface AuthSettings {
+  registration_enabled: boolean;
+  email_otp_enabled: boolean;
+  otp_cooldown_seconds: number;
+}
+
 export interface SystemSettings {
+  // Flat legacy properties for backwards-compatibility
   minWithdrawalBalance: number;
   requiredQualifiedReferrals: number;
   referralCommissionPct: number;
@@ -269,4 +337,64 @@ export interface SystemSettings {
   easypaisaTitle: string;
   easypaisaNumber: string;
   bankIban: string;
+
+  // Modern structured modules persisted in public.settings
+  general?: GeneralSettings;
+  referrals?: ReferralSettings;
+  withdrawals?: WithdrawalSettings;
+  welcomeMessage?: WelcomeMessageSettings;
+  auth?: AuthSettings;
 }
+
+export interface UserDetailOverview {
+  profile: Profile;
+  membership: Membership | null;
+  plan: Plan | null;
+  wallet: WalletAccount | null;
+  referralsCount: number;
+  qualifiedReferralsCount: number;
+  completedTasksCount: number;
+  totalWithdrawn: number;
+  withdrawalsCount: number;
+  recentSessions: VideoWatchSession[];
+  recentTransactions: WalletTransaction[];
+  recentWithdrawals: Withdrawal[];
+}
+
+export type ContentElementType = 'banner' | 'text' | 'video' | 'youtube' | 'audio';
+
+export type ContentPlacement =
+  | 'dashboard_top'
+  | 'dashboard_content'
+  | 'dashboard_bottom'
+  | 'earn_top'
+  | 'earn_bottom'
+  | 'plans_top'
+  | 'plans_bottom';
+
+export interface ContentLayoutConfig {
+  width?: 'full' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl';
+  height?: 'auto' | 'sm' | 'md' | 'lg' | 'fixed';
+  alignment?: 'left' | 'center' | 'right';
+  margin?: 'none' | 'sm' | 'md' | 'lg';
+  padding?: 'none' | 'sm' | 'md' | 'lg';
+  borderRadius?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+}
+
+export interface WebsiteContentItem {
+  id: string;
+  type: ContentElementType;
+  title?: string;
+  description?: string;
+  content_url: string; // Image URL, Text body, Audio URL, MP4 URL, or YouTube Embed URL
+  placement: ContentPlacement;
+  display_order: number;
+  enabled: boolean;
+  desktop_visible: boolean;
+  mobile_visible: boolean;
+  layout_config: ContentLayoutConfig;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+}
+

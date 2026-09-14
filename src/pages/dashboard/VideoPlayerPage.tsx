@@ -20,13 +20,19 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { AlertBanner } from '../../components/ui/AlertBanner';
 import { formatCurrency } from '../../lib/utils';
+import { parseYouTubeVideo } from '../../lib/youtube';
 
 export const VideoPlayerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { videos, membership, startWatchSession, completeWatchSession, wallet } = usePlatform();
+  const { videos, membership, startWatchSession, completeWatchSession, wallet, refetchData } = usePlatform();
+
+  useEffect(() => {
+    refetchData();
+  }, []);
 
   const video = videos.find((v) => v.id === id);
+  const parsedYt = parseYouTubeVideo(video?.video_url || '');
 
   // Player telemetry states
   const [session, setSession] = useState<VideoWatchSession | null>(null);
@@ -49,7 +55,7 @@ export const VideoPlayerPage: React.FC = () => {
     if (!video) return;
 
     if (!membership || membership.status !== 'active') {
-      setError('Active Rs. 300 WatchEarn membership required to start tasks.');
+      setError('An active membership plan is required to start tasks.');
       return;
     }
 
@@ -59,6 +65,10 @@ export const VideoPlayerPage: React.FC = () => {
         setError(res.error);
       } else {
         setSession(res.session);
+        // If YouTube embed, playback starts automatically with session timer
+        if (parsedYt.isYouTube) {
+          setIsPlaying(true);
+        }
       }
     };
 
@@ -184,20 +194,32 @@ export const VideoPlayerPage: React.FC = () => {
       {/* Main Video Screen */}
       <Card className="overflow-hidden border-slate-200">
         <div className="relative aspect-video bg-black flex items-center justify-center">
-          <video
-            ref={videoRef}
-            src={video.video_url}
-            poster={video.thumbnail_url}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={() => setIsPlaying(false)}
-            playsInline
-            controls={false}
-            className="w-full h-full object-contain"
-          />
+          {parsedYt.isYouTube && parsedYt.embedUrl ? (
+            <div className="w-full h-full relative aspect-video bg-black">
+              <iframe
+                src={`${parsedYt.embedUrl}?enablejsapi=1&autoplay=1&rel=0&modestbranding=1`}
+                title={video.title}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              src={video.video_url}
+              poster={video.thumbnail_url}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+              playsInline
+              controls={false}
+              className="w-full h-full object-contain"
+            />
+          )}
 
-          {/* Center Play/Pause Overlay Button */}
-          {!isPlaying && !isCompleted && session && (
+          {/* Center Play/Pause Overlay Button (Only for direct MP4 videos) */}
+          {!parsedYt.isYouTube && !isPlaying && !isCompleted && session && (
             <button
               onClick={handlePlay}
               className="absolute w-16 h-16 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-2xl hover:scale-110 transition-transform"
