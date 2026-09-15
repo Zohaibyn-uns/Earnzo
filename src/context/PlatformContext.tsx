@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   Plan,
+  PaymentClearing,
   Membership,
   Payment,
   VideoCampaign,
@@ -163,6 +164,10 @@ interface PlatformContextType {
 
   // Payments & Admin
   payments: Payment[];
+  paymentClearings: PaymentClearing[];
+  activeRevenue: number;
+  totalClearedRevenue: number;
+  clearRevenue: (amount: number, note?: string) => Promise<{ success: boolean; message?: string; error?: string; remaining?: number }>;
   allProfiles: Profile[];
   allMemberships: Membership[];
   allWallets: Record<string, WalletAccount>;
@@ -225,6 +230,8 @@ const STORAGE_KEYS = {
   AUDIT_LOGS: 'watchearn_audit_logs_v3',
   SETTINGS: 'watchearn_settings_v3',
   WEBSITE_CONTENT: 'watchearn_website_content_v1',
+  PAYMENT_CLEARINGS: 'watchearn_payment_clearings_v1',
+  COMPLETED_VIDEOS_TODAY: 'watchearn_completed_videos_today_v1',
 };
 
 export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -534,6 +541,14 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (auditData && auditData.length > 0) {
             setAuditLogs(auditData as AuditLog[]);
           }
+
+          const { data: clrData } = await supabase
+            .from('payment_clearings')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (clrData && clrData.length > 0) {
+            setPaymentClearings(clrData as PaymentClearing[]);
+          }
         }
       } else {
         // Logged out / guest state: clear sensitive data
@@ -764,18 +779,86 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [activeSession, setActiveSession] = useState<VideoWatchSession | null>(null);
 
+  // Payment Clearings State (Preserves all payments while resetting displayed revenue)
+  const [paymentClearings, setPaymentClearings] = useState<PaymentClearing[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PAYMENT_CLEARINGS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PAYMENT_CLEARINGS, JSON.stringify(paymentClearings));
+  }, [paymentClearings]);
+
+  const totalRevenue = useMemo(() => {
+    return allPayments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+  }, [allPayments]);
+
+  const totalClearedRevenue = useMemo(() => {
+    return paymentClearings.reduce((s, c) => s + Number(c.amount_cleared), 0);
+  }, [paymentClearings]);
+
+  const activeRevenue = useMemo(() => {
+    return Math.max(0, totalRevenue - totalClearedRevenue);
+  }, [totalRevenue, totalClearedRevenue]);
+
   const todayStr = new Date().toISOString().split('T')[0];
+  const todayLocalStr = new Date().toLocaleDateString('en-CA');
+
+  const [cachedCompletedToday, setCachedCompletedToday] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.COMPLETED_VIDEOS_TODAY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.date === todayStr || parsed.date === todayLocalStr) {
+          return Array.isArray(parsed.ids) ? parsed.ids : [];
+        }
+      }
+    } catch {}
+    return [];
+  });
+
+  const markVideoCompletedToday = (videoId: string) => {
+    if (!videoId) return;
+    setCachedCompletedToday((prev) => {
+      const next = Array.from(new Set([...prev, videoId]));
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.COMPLETED_VIDEOS_TODAY,
+          JSON.stringify({ date: todayStr, ids: next })
+        );
+      } catch {}
+      return next;
+    });
+  };
+
   const completedVideoIdsToday = useMemo(() => {
     if (!currentUserId) return [];
-    return allSessions
-      .filter(
-        (s) =>
-          s.user_id === currentUserId &&
-          s.status === 'completed' &&
-          s.completed_at?.startsWith(todayStr)
-      )
-      .map((s) => s.video_id);
-  }, [allSessions, currentUserId, todayStr]);
+    const ids = new Set<string>(cachedCompletedToday);
+
+    // 1. From allSessions
+    allSessions.forEach((s) => {
+      if (s.user_id === currentUserId && s.status === 'completed') {
+        const d = s.completed_at || s.started_at;
+        if (d && (d.startsWith(todayStr) || d.startsWith(todayLocalStr))) {
+          ids.add(s.video_id);
+        }
+      }
+    });
+
+    // 2. From ledger transactions
+    allTransactions.forEach((t) => {
+      if (t.user_id === currentUserId && t.type === 'video_reward') {
+        const d = t.created_at;
+        if (d && (d.startsWith(todayStr) || d.startsWith(todayLocalStr))) {
+          if (t.metadata && t.metadata.video_id) {
+            ids.add(t.metadata.video_id);
+          }
+        }
+      }
+    });
+
+    return Array.from(ids);
+  }, [allSessions, allTransactions, cachedCompletedToday, currentUserId, todayStr, todayLocalStr]);
 
   const withdrawals: Withdrawal[] = useMemo(() => {
     if (isAdmin) return allWithdrawals;
@@ -1457,6 +1540,10 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
 
         // Refresh all business state from Supabase (wallets, memberships, transactions, sessions)
+        const targetSession = allSessions.find((s) => s.id === sessionId);
+        if (targetSession?.video_id) {
+          markVideoCompletedToday(targetSession.video_id);
+        }
         await fetchData();
         setActiveSession(null);
 
@@ -2276,6 +2363,77 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const clearRevenue = async (
+    amount: number,
+    notes?: string
+  ): Promise<{ success: boolean; message: string; remaining?: number }> => {
+    if (amount <= 0) {
+      return { success: false, message: 'Clearing amount must be greater than zero.' };
+    }
+    if (amount > activeRevenue) {
+      return { success: false, message: `Clearing amount (Rs. ${amount}) exceeds current active revenue (Rs. ${activeRevenue}).` };
+    }
+
+    if (isLiveSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase.rpc('rpc_admin_clear_revenue', {
+          p_amount: amount,
+          p_notes: notes || null,
+        });
+
+        if (!error && data) {
+          await fetchData();
+          return {
+            success: true,
+            message: `Rs. ${amount} successfully cleared. Reference ID: ${data.reference_id}`,
+            remaining: data.remaining_total,
+          };
+        }
+      } catch (err: any) {
+        console.warn('Supabase clearRevenue exception, using fallback:', err);
+      }
+    }
+
+    // Local / fallback clearing record
+    const refId = `CLR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const paidPayments = allPayments.filter((p) => p.status === 'paid');
+    const uniqueUsers = new Set(paidPayments.map((p) => p.user_id)).size;
+
+    const breakdown: Record<string, number> = {};
+    paidPayments.forEach((p) => {
+      breakdown[p.method] = (breakdown[p.method] || 0) + p.amount;
+    });
+
+    const newRecord: PaymentClearing = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `clr-${Date.now()}`,
+      reference_id: refId,
+      amount_cleared: amount,
+      total_before: activeRevenue,
+      remaining_total: Math.max(0, activeRevenue - amount),
+      admin_id: user?.id,
+      admin_email: user?.email || 'admin@earnzo.com',
+      contributing_payments_count: paidPayments.length,
+      contributing_users_count: uniqueUsers,
+      breakdown,
+      notes,
+      created_at: new Date().toISOString(),
+    };
+
+    setPaymentClearings((prev) => [newRecord, ...prev]);
+    logAuditEvent('revenue_cleared', 'payment_clearings', newRecord.id, {
+      reference_id: refId,
+      amount_cleared: amount,
+      remaining_total: newRecord.remaining_total,
+      notes,
+    });
+
+    return {
+      success: true,
+      message: `Rs. ${amount} successfully cleared. Reference ID: ${refId}`,
+      remaining: newRecord.remaining_total,
+    };
+  };
+
   const resetToDefaults = () => {
     localStorage.clear();
     setPlans(INITIAL_PLANS);
@@ -2355,6 +2513,10 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         toggleDemoMembership,
         refetchData: fetchData,
         isLoading,
+        paymentClearings,
+        clearRevenue,
+        activeRevenue,
+        totalClearedRevenue,
       }}
     >
       {children}

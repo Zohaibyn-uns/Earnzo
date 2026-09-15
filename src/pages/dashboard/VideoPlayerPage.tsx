@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
-  Play,
-  Pause,
   Clock,
   ShieldCheck,
   Award,
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
-  Lock,
   Sparkles,
   Info,
+  CalendarCheck,
 } from 'lucide-react';
 import { usePlatform } from '../../context/PlatformContext';
 import { VideoWatchSession } from '../../types/database';
@@ -20,19 +18,26 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { AlertBanner } from '../../components/ui/AlertBanner';
 import { formatCurrency } from '../../lib/utils';
-import { parseYouTubeVideo } from '../../lib/youtube';
+import { SponsoredVideoPlayer } from '../../components/video/SponsoredVideoPlayer';
 
 export const VideoPlayerPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { videos, membership, startWatchSession, completeWatchSession, wallet, refetchData } = usePlatform();
+  const {
+    videos,
+    membership,
+    startWatchSession,
+    completeWatchSession,
+    wallet,
+    refetchData,
+    completedVideoIdsToday,
+  } = usePlatform();
 
   useEffect(() => {
     refetchData();
   }, []);
 
   const video = videos.find((v) => v.id === id);
-  const parsedYt = parseYouTubeVideo(video?.video_url || '');
+  const isAlreadyCompletedToday = Boolean(id && completedVideoIdsToday.includes(id));
 
   // Player telemetry states
   const [session, setSession] = useState<VideoWatchSession | null>(null);
@@ -44,15 +49,18 @@ export const VideoPlayerPage: React.FC = () => {
   const [rewardGranted, setRewardGranted] = useState<number | null>(null);
   const [tabIsActive, setTabIsActive] = useState(true);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<any>(null);
 
   const requiredDuration = video?.duration_seconds || 30;
   const progressPercent = Math.min(100, Math.round((elapsedSeconds / requiredDuration) * 100));
 
-  // Initialize secure session on mount
+  // Initialize secure session on mount (only if not already completed today)
   useEffect(() => {
     if (!video) return;
+
+    if (isAlreadyCompletedToday) {
+      return;
+    }
 
     if (!membership || membership.status !== 'active') {
       setError('An active membership plan is required to start tasks.');
@@ -65,37 +73,34 @@ export const VideoPlayerPage: React.FC = () => {
         setError(res.error);
       } else {
         setSession(res.session);
-        // If YouTube embed, playback starts automatically with session timer
-        if (parsedYt.isYouTube) {
-          setIsPlaying(true);
-        }
+        setIsPlaying(true);
       }
     };
 
     initSession();
-  }, [video?.id]);
+  }, [video?.id, isAlreadyCompletedToday]);
 
   // Tab visibility detection (anti-cheat: pause if user switches tabs)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setTabIsActive(false);
-        if (videoRef.current && !videoRef.current.paused) {
-          videoRef.current.pause();
-          setIsPlaying(false);
-        }
+        setIsPlaying(false);
       } else {
         setTabIsActive(true);
+        if (session && !isCompleted && !isAlreadyCompletedToday) {
+          setIsPlaying(true);
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
+  }, [session, isCompleted, isAlreadyCompletedToday]);
 
   // Playback timer ticker
   useEffect(() => {
-    if (isPlaying && tabIsActive && !isCompleted) {
+    if (isPlaying && tabIsActive && !isCompleted && !isAlreadyCompletedToday) {
       timerRef.current = setInterval(() => {
         setElapsedSeconds((prev) => {
           const next = prev + 1;
@@ -112,26 +117,11 @@ export const VideoPlayerPage: React.FC = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, tabIsActive, requiredDuration, isCompleted]);
-
-  const handlePlay = () => {
-    if (!session) return;
-    if (videoRef.current) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    }
-  };
-
-  const handlePause = () => {
-    if (videoRef.current) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
+  }, [isPlaying, tabIsActive, requiredDuration, isCompleted, isAlreadyCompletedToday]);
 
   // Submit to Server-Side Verification Engine
   const handleClaimReward = async () => {
-    if (!session || !video) return;
+    if (!session || !video || isCompleted || isAlreadyCompletedToday) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -142,6 +132,7 @@ export const VideoPlayerPage: React.FC = () => {
 
     if (result.success && result.rewardAmount) {
       setIsCompleted(true);
+      setIsPlaying(false);
       setRewardGranted(result.rewardAmount);
     } else {
       setError(result.error || 'Server validation failed. Verification criteria not met.');
@@ -153,22 +144,68 @@ export const VideoPlayerPage: React.FC = () => {
       <div className="text-center py-16 space-y-4">
         <h2 className="text-xl font-bold text-slate-900">Sponsored Video Not Found</h2>
         <Link to="/dashboard/videos">
-          <Button variant="outline">Back to Video Catalog</Button>
+          <Button variant="outline">Return to Earn Tasks</Button>
         </Link>
+      </div>
+    );
+  }
+
+  // If task is ALREADY completed today: Stay on Earn section with informative card
+  if (isAlreadyCompletedToday && !isCompleted) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4 space-y-6">
+        <Link
+          to="/dashboard/videos"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Earn Tasks</span>
+        </Link>
+
+        <div className="p-8 rounded-3xl bg-slate-950 text-white border border-slate-800 shadow-2xl text-center space-y-5">
+          <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+            <CalendarCheck className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Completed Today
+            </span>
+            <h2 className="text-2xl font-black text-white tracking-tight">
+              {video.title}
+            </h2>
+            <p className="text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+              You have already completed this sponsored task today and the reward has been credited to your ledger wallet. This task will become available again tomorrow at 12:00 AM PKT.
+            </p>
+          </div>
+
+          <div className="pt-2 flex justify-center">
+            <Link to="/dashboard/videos">
+              <Button
+                variant="primary"
+                size="md"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6"
+                leftIcon={<ArrowLeft className="w-4 h-4" />}
+              >
+                Return to Earn Tasks
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Top Breadcrumb */}
+      {/* Top Navigation - Strictly Earn Section */}
       <div className="flex items-center justify-between">
         <Link
           to="/dashboard/videos"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to All Tasks</span>
+          <span>Back to Earn Tasks</span>
         </Link>
 
         <div className="flex items-center gap-2">
@@ -191,50 +228,30 @@ export const VideoPlayerPage: React.FC = () => {
         />
       )}
 
-      {/* Main Video Screen */}
+      {/* Main Video Screen with Restricted Sponsored Player */}
       <Card className="overflow-hidden border-slate-200">
-        <div className="relative aspect-video bg-black flex items-center justify-center">
-          {parsedYt.isYouTube && parsedYt.embedUrl ? (
-            <div className="w-full h-full relative aspect-video bg-black">
-              <iframe
-                src={`${parsedYt.embedUrl}?enablejsapi=1&autoplay=1&rel=0&modestbranding=1`}
-                title={video.title}
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          ) : (
-            <video
-              ref={videoRef}
-              src={video.video_url}
-              poster={video.thumbnail_url}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-              playsInline
-              controls={false}
-              className="w-full h-full object-contain"
-            />
-          )}
+        <div className="relative">
+          {/* Restricted Player: User cannot seek/skip. Volume & Share allowed only */}
+          <SponsoredVideoPlayer
+            video={video}
+            isPlaying={isPlaying}
+            isCompleted={isCompleted}
+            tabIsActive={tabIsActive}
+            elapsedSeconds={elapsedSeconds}
+            requiredDuration={requiredDuration}
+            onPlayStateChange={setIsPlaying}
+          />
 
-          {/* Center Play/Pause Overlay Button (Only for direct MP4 videos) */}
-          {!parsedYt.isYouTube && !isPlaying && !isCompleted && session && (
-            <button
-              onClick={handlePlay}
-              className="absolute w-16 h-16 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-2xl hover:scale-110 transition-transform"
-            >
-              <Play className="w-8 h-8 fill-white ml-1" />
-            </button>
-          )}
-
-          {/* Reward Completion Overlay */}
+          {/* Reward Completion Overlay: Strictly keeps user on Earn section */}
           {isCompleted && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 space-y-4 text-white z-10 animate-fade-in">
+            <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 space-y-4 text-white z-30 animate-fade-in">
               <div className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-xl shadow-emerald-500/30">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
-              <div>
+              <div className="space-y-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Available Tomorrow
+                </span>
                 <h3 className="text-2xl font-black">Task Reward Credited!</h3>
                 <p className="text-sm text-slate-300 mt-1">
                   Rs. {rewardGranted?.toFixed(2)} added to your double-entry ledger wallet.
@@ -245,13 +262,13 @@ export const VideoPlayerPage: React.FC = () => {
               </div>
               <div className="flex gap-3 pt-2">
                 <Link to="/dashboard/videos">
-                  <Button variant="outline" className="text-white border-white/30 hover:bg-white/10" size="sm">
-                    Next Video Task
-                  </Button>
-                </Link>
-                <Link to="/dashboard/wallet">
-                  <Button variant="primary" size="sm">
-                    Inspect Wallet
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6"
+                    leftIcon={<ArrowLeft className="w-4 h-4" />}
+                  >
+                    Return to Earn Tasks
                   </Button>
                 </Link>
               </div>
@@ -271,38 +288,20 @@ export const VideoPlayerPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Playback action / Claim button */}
+            {/* Claim Reward Button (Enabled only once duration met) */}
             <div className="flex items-center gap-3 w-full sm:w-auto">
               {!isCompleted && (
-                <>
-                  {isPlaying ? (
-                    <Button variant="secondary" size="md" onClick={handlePause} leftIcon={<Pause className="w-4 h-4" />}>
-                      Pause
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={handlePlay}
-                      disabled={!session}
-                      leftIcon={<Play className="w-4 h-4" />}
-                    >
-                      {elapsedSeconds > 0 ? 'Resume' : 'Start Playback'}
-                    </Button>
-                  )}
-
-                  {/* Claim Reward Button (Enabled only once duration met) */}
-                  <Button
-                    variant="success"
-                    size="md"
-                    disabled={elapsedSeconds < requiredDuration || isSubmitting}
-                    isLoading={isSubmitting}
-                    onClick={handleClaimReward}
-                    leftIcon={<Award className="w-4 h-4" />}
-                  >
-                    Claim Rs. {video.reward_amount.toFixed(2)}
-                  </Button>
-                </>
+                <Button
+                  variant="success"
+                  size="md"
+                  className="w-full sm:w-auto"
+                  disabled={elapsedSeconds < requiredDuration || isSubmitting}
+                  isLoading={isSubmitting}
+                  onClick={handleClaimReward}
+                  leftIcon={<Award className="w-4 h-4" />}
+                >
+                  Claim Rs. {video.reward_amount.toFixed(2)}
+                </Button>
               )}
             </div>
           </div>
@@ -312,7 +311,7 @@ export const VideoPlayerPage: React.FC = () => {
             <div className="flex items-center justify-between text-xs font-semibold">
               <span className="text-slate-600 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                <span>Server-Side Duration Telemetry</span>
+                <span>Anti-Cheat Duration Telemetry</span>
               </span>
               <span className={elapsedSeconds >= requiredDuration ? 'text-emerald-600 font-bold' : 'text-slate-500'}>
                 {elapsedSeconds}s / {requiredDuration}s ({progressPercent}%)
@@ -333,7 +332,7 @@ export const VideoPlayerPage: React.FC = () => {
           <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-500 flex items-start gap-2.5">
             <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
             <span className="leading-relaxed">
-              Rewards are issued via atomic database RPC. Client browsers cannot forge completion timestamps. Please ensure continuous playback to complete verification.
+              Rewards are issued via atomic database RPC. Client browsers cannot forge completion timestamps or seek past video content.
             </span>
           </div>
         </div>

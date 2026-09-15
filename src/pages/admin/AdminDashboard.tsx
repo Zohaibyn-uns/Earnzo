@@ -31,12 +31,13 @@ import {
 } from 'recharts';
 
 export const AdminDashboard: React.FC = () => {
-  const { allProfiles, membership, payments, videos, withdrawals, transactions } = usePlatform();
+  const { allProfiles, membership, payments, videos, withdrawals, transactions, activeRevenue, totalClearedRevenue } = usePlatform();
 
   // Metrics calculations
   const totalUsers = allProfiles.length;
   const activeMembers = membership?.status === 'active' ? 1 : 0;
-  const totalRevenue = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+  const grossRevenue = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+  const totalRevenue = typeof activeRevenue === 'number' ? activeRevenue : grossRevenue;
   const todayRevenue = payments
     .filter((p) => p.status === 'paid' && p.created_at.startsWith(new Date().toISOString().split('T')[0]))
     .reduce((s, p) => s + p.amount, 0);
@@ -115,14 +116,16 @@ export const AdminDashboard: React.FC = () => {
           <span className="text-[10px] text-slate-400">Rs. 300 30-day passes</span>
         </div>
 
-        {/* Total Platform Revenue */}
+        {/* Total Platform Active Revenue */}
         <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-1">
           <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
-            <span>Total Revenue</span>
+            <span>Active Revenue Total</span>
             <TrendingUp className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="text-2xl sm:text-3xl font-black text-white">Rs. {totalRevenue.toFixed(2)}</div>
-          <span className="text-[10px] text-indigo-300">Today: Rs. {todayRevenue.toFixed(2)}</span>
+          <span className="text-[10px] text-slate-400 block truncate">
+            Gross: Rs. {grossRevenue.toFixed(2)} {totalClearedRevenue > 0 ? `• Cleared: Rs. ${totalClearedRevenue.toFixed(2)}` : ''}
+          </span>
         </div>
 
         {/* Total Rewards Disbursed */}

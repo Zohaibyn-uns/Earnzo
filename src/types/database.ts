@@ -71,6 +71,21 @@ export interface Payment {
   plan?: Plan;
 }
 
+export interface PaymentClearing {
+  id: string;
+  reference_id: string;
+  amount_cleared: number;
+  total_before: number;
+  remaining_total: number;
+  admin_id?: string;
+  admin_email: string;
+  contributing_payments_count: number;
+  contributing_users_count: number;
+  breakdown?: Record<string, number>;
+  notes?: string;
+  created_at: string;
+}
+
 export interface VideoCampaign {
   id: string;
   name: string;

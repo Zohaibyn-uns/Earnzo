@@ -6,7 +6,8 @@
 --              Sponsored Tasks by:
 --              1. Enabling RLS on public.videos with proper SELECT and ADMIN policies.
 --              2. Adding public.videos to supabase_realtime publication.
---              3. Providing atomic RPC procedures for administrator video CRUD.
+--              3. Providing atomic RPC procedures for administrator video CRUD
+--                 (rpc_admin_add_video, rpc_admin_update_video, rpc_admin_delete_video).
 --              4. Seeding default active sponsored video tasks with YouTube embeds.
 -- ==============================================================================
 
@@ -23,6 +24,7 @@ CREATE POLICY "Public read active videos" ON public.videos
 
 -- 3. RLS Policy: Administrators can manage (INSERT, UPDATE, DELETE) videos
 DROP POLICY IF EXISTS "Admins manage videos" ON public.videos;
+DROP POLICY IF EXISTS "Admins can manage videos" ON public.videos;
 CREATE POLICY "Admins manage videos" ON public.videos
     FOR ALL 
     USING (public.is_admin(auth.uid()))
@@ -44,36 +46,47 @@ END $$;
 
 -- 5. Atomic RPC: Admin Add Sponsored Video Task
 CREATE OR REPLACE FUNCTION public.rpc_admin_add_video(
-  p_id UUID,
-  p_campaign_id UUID,
-  p_title TEXT,
-  p_description TEXT,
-  p_video_url TEXT,
-  p_thumbnail_url TEXT,
-  p_duration_seconds INT,
-  p_reward_amount NUMERIC,
-  p_daily_limit INT,
-  p_per_user_limit INT,
-  p_status TEXT,
-  p_category TEXT,
-  p_sponsor_badge TEXT
+  p_id UUID DEFAULT NULL,
+  p_campaign_id UUID DEFAULT NULL,
+  p_title TEXT DEFAULT '',
+  p_description TEXT DEFAULT '',
+  p_video_url TEXT DEFAULT '',
+  p_thumbnail_url TEXT DEFAULT '',
+  p_duration_seconds INT DEFAULT 30,
+  p_reward_amount NUMERIC DEFAULT 10.00,
+  p_daily_limit INT DEFAULT 500,
+  p_per_user_limit INT DEFAULT 1,
+  p_status TEXT DEFAULT 'active',
+  p_category TEXT DEFAULT 'Technology',
+  p_sponsor_badge TEXT DEFAULT 'Official Sponsor'
 )
 RETURNS JSONB AS $$
 DECLARE
   v_admin_id UUID := auth.uid();
+  v_admin_email TEXT;
   v_new_id UUID := COALESCE(p_id, uuid_generate_v4());
   v_clean_campaign_id UUID := NULL;
+  v_clean_status TEXT;
 BEGIN
   -- Strict administrator authorization check
   IF NOT public.is_admin(v_admin_id) THEN
     RAISE EXCEPTION 'Access Denied: Only platform administrators can create sponsored tasks.';
   END IF;
 
+  SELECT email INTO v_admin_email FROM public.profiles WHERE id = v_admin_id;
+
   -- Validate campaign foreign key if provided
   IF p_campaign_id IS NOT NULL THEN
     IF EXISTS (SELECT 1 FROM public.video_campaigns WHERE id = p_campaign_id) THEN
       v_clean_campaign_id := p_campaign_id;
     END IF;
+  END IF;
+
+  -- Ensure status is valid ('active', 'paused', 'archived')
+  IF p_status IN ('active', 'paused', 'archived') THEN
+    v_clean_status := p_status;
+  ELSE
+    v_clean_status := 'active';
   END IF;
 
   INSERT INTO public.videos (
@@ -95,24 +108,35 @@ BEGIN
   ) VALUES (
     v_new_id,
     v_clean_campaign_id,
-    p_title,
-    p_description,
-    p_video_url,
-    p_thumbnail_url,
+    COALESCE(p_title, 'Sponsored Task'),
+    COALESCE(p_description, ''),
+    COALESCE(p_video_url, ''),
+    COALESCE(p_thumbnail_url, ''),
     COALESCE(p_duration_seconds, 30),
     COALESCE(p_reward_amount, 10.00),
     COALESCE(p_daily_limit, 500),
     COALESCE(p_per_user_limit, 1),
-    COALESCE(p_status, 'active'),
+    v_clean_status,
     COALESCE(p_category, 'Technology'),
     COALESCE(p_sponsor_badge, 'Official Sponsor'),
     NOW(),
     NOW()
   );
 
-  -- Audit log entry
-  INSERT INTO public.audit_logs (user_id, action, entity, entity_id, new_values)
-  VALUES (v_admin_id, 'video_created', 'videos', v_new_id, jsonb_build_object('title', p_title, 'url', p_video_url));
+  -- Audit log entry (failsafe)
+  BEGIN
+    INSERT INTO public.audit_logs (actor_id, actor_email, action, entity, entity_id, details)
+    VALUES (
+      v_admin_id,
+      COALESCE(v_admin_email, 'admin@earnzo.com'),
+      'video_created',
+      'videos',
+      v_new_id,
+      jsonb_build_object('title', p_title, 'url', p_video_url)
+    );
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   RETURN jsonb_build_object('success', TRUE, 'id', v_new_id);
 END;
@@ -121,32 +145,40 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 6. Atomic RPC: Admin Update Sponsored Video Task
 CREATE OR REPLACE FUNCTION public.rpc_admin_update_video(
   p_id UUID,
-  p_campaign_id UUID,
-  p_title TEXT,
-  p_description TEXT,
-  p_video_url TEXT,
-  p_thumbnail_url TEXT,
-  p_duration_seconds INT,
-  p_reward_amount NUMERIC,
-  p_daily_limit INT,
-  p_per_user_limit INT,
-  p_status TEXT,
-  p_category TEXT,
-  p_sponsor_badge TEXT
+  p_campaign_id UUID DEFAULT NULL,
+  p_title TEXT DEFAULT NULL,
+  p_description TEXT DEFAULT NULL,
+  p_video_url TEXT DEFAULT NULL,
+  p_thumbnail_url TEXT DEFAULT NULL,
+  p_duration_seconds INT DEFAULT NULL,
+  p_reward_amount NUMERIC DEFAULT NULL,
+  p_daily_limit INT DEFAULT NULL,
+  p_per_user_limit INT DEFAULT NULL,
+  p_status TEXT DEFAULT NULL,
+  p_category TEXT DEFAULT NULL,
+  p_sponsor_badge TEXT DEFAULT NULL
 )
 RETURNS JSONB AS $$
 DECLARE
   v_admin_id UUID := auth.uid();
+  v_admin_email TEXT;
   v_clean_campaign_id UUID := NULL;
+  v_valid_status TEXT := NULL;
 BEGIN
   IF NOT public.is_admin(v_admin_id) THEN
     RAISE EXCEPTION 'Access Denied: Only platform administrators can update sponsored tasks.';
   END IF;
 
+  SELECT email INTO v_admin_email FROM public.profiles WHERE id = v_admin_id;
+
   IF p_campaign_id IS NOT NULL THEN
     IF EXISTS (SELECT 1 FROM public.video_campaigns WHERE id = p_campaign_id) THEN
       v_clean_campaign_id := p_campaign_id;
     END IF;
+  END IF;
+
+  IF p_status IS NOT NULL AND p_status IN ('active', 'paused', 'archived') THEN
+    v_valid_status := p_status;
   END IF;
 
   UPDATE public.videos
@@ -159,15 +191,26 @@ BEGIN
     reward_amount = COALESCE(p_reward_amount, reward_amount),
     daily_limit = COALESCE(p_daily_limit, daily_limit),
     per_user_limit = COALESCE(p_per_user_limit, per_user_limit),
-    status = COALESCE(p_status, status),
+    status = COALESCE(v_valid_status, status),
     category = COALESCE(p_category, category),
     sponsor_badge = COALESCE(p_sponsor_badge, sponsor_badge),
     campaign_id = CASE WHEN p_campaign_id IS NOT NULL THEN v_clean_campaign_id ELSE campaign_id END,
     updated_at = NOW()
   WHERE id = p_id;
 
-  INSERT INTO public.audit_logs (user_id, action, entity, entity_id, new_values)
-  VALUES (v_admin_id, 'video_updated', 'videos', p_id, jsonb_build_object('title', p_title, 'status', p_status));
+  BEGIN
+    INSERT INTO public.audit_logs (actor_id, actor_email, action, entity, entity_id, details)
+    VALUES (
+      v_admin_id,
+      COALESCE(v_admin_email, 'admin@earnzo.com'),
+      'video_updated',
+      'videos',
+      p_id,
+      jsonb_build_object('title', p_title, 'status', p_status)
+    );
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   RETURN jsonb_build_object('success', TRUE, 'id', p_id);
 END;
@@ -178,21 +221,40 @@ CREATE OR REPLACE FUNCTION public.rpc_admin_delete_video(p_id UUID)
 RETURNS JSONB AS $$
 DECLARE
   v_admin_id UUID := auth.uid();
+  v_admin_email TEXT;
 BEGIN
   IF NOT public.is_admin(v_admin_id) THEN
     RAISE EXCEPTION 'Access Denied: Only platform administrators can delete sponsored tasks.';
   END IF;
 
+  SELECT email INTO v_admin_email FROM public.profiles WHERE id = v_admin_id;
+
   DELETE FROM public.videos WHERE id = p_id;
 
-  INSERT INTO public.audit_logs (user_id, action, entity, entity_id)
-  VALUES (v_admin_id, 'video_deleted', 'videos', p_id);
+  BEGIN
+    INSERT INTO public.audit_logs (actor_id, actor_email, action, entity, entity_id, details)
+    VALUES (
+      v_admin_id,
+      COALESCE(v_admin_email, 'admin@earnzo.com'),
+      'video_deleted',
+      'videos',
+      p_id,
+      jsonb_build_object('deleted_id', p_id)
+    );
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   RETURN jsonb_build_object('success', TRUE, 'id', p_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 8. Seed Initial Verified Active Sponsored Tasks (with YouTube embeds)
+-- 8. Grant Execution Permissions
+GRANT EXECUTE ON FUNCTION public.rpc_admin_add_video TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_update_video TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_delete_video TO authenticated, anon;
+
+-- 9. Seed Initial Verified Active Sponsored Tasks (with YouTube embeds)
 INSERT INTO public.videos (
     id,
     title,

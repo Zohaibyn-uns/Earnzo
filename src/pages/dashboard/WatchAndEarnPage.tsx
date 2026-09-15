@@ -176,6 +176,12 @@ export const WatchAndEarnPage: React.FC = () => {
                         <Clock className="w-3 h-3 text-amber-400" />
                         <span>{video.duration_seconds}s required</span>
                       </div>
+                      {isCompletedToday && (
+                        <div className="absolute top-3 right-3 bg-emerald-600/95 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow">
+                          <CheckCircle2 className="w-3 h-3 text-white" />
+                          <span>Completed Today</span>
+                        </div>
+                      )}
                       <div className="absolute bottom-3 right-3 bg-emerald-600 text-white text-xs font-black px-2.5 py-1 rounded shadow">
                         Rs. {taskReward.toFixed(2)}
                       </div>
@@ -207,9 +213,9 @@ export const WatchAndEarnPage: React.FC = () => {
                             size="sm"
                             disabled
                             leftIcon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                            className="border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed text-xs font-semibold"
+                            className="border-emerald-200 bg-emerald-50 text-emerald-700 cursor-not-allowed text-xs font-bold"
                           >
-                            Available Tomorrow
+                            Completed • Available Tomorrow
                           </Button>
                         ) : tasksCompletedToday >= maxTasks ? (
                           <Button

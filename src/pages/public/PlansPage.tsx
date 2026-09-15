@@ -23,6 +23,7 @@ import { Input } from '../../components/ui/Input';
 import { AlertBanner } from '../../components/ui/AlertBanner';
 import { ContentElementRenderer } from '../../components/content/ContentElementRenderer';
 import { formatCurrency } from '../../lib/utils';
+import { VipPaymentAccountCard } from '../../components/payment/VipPaymentAccountCard';
 
 export const PlansPage: React.FC = () => {
   const { plans, activePlan, submitPayment, settings, refetchData } = usePlatform();
@@ -293,81 +294,12 @@ export const PlansPage: React.FC = () => {
               />
             )}
 
-            {/* Plan Summary Strip */}
-            <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Selected Tier</span>
-                <h4 className="text-lg font-black text-slate-900">{selectedPlan.name}</h4>
-                <p className="text-xs text-slate-600">
-                  {selectedPlan.daily_task_limit} daily tasks • Rs. {selectedPlan.reward_per_task}/task
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-2xl font-black text-indigo-700">Rs. {selectedPlan.price}</span>
-                <span className="block text-[10px] text-slate-500">/ 30 Days</span>
-              </div>
-            </div>
-
-            {/* Official Deposit Channels */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
-                Official Platform Deposit Receiving Accounts
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {/* JazzCash */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-rose-600">
-                    <span>JazzCash</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(settings.jazzcashNumber, 'jc')}
-                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5"
-                    >
-                      <Copy className="w-2.5 h-2.5" />
-                      {copiedKey === 'jc' ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="font-mono font-bold text-slate-900">{settings.jazzcashNumber}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{settings.jazzcashTitle}</div>
-                </div>
-
-                {/* Easypaisa */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-emerald-600">
-                    <span>Easypaisa</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(settings.easypaisaNumber, 'ep')}
-                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5"
-                    >
-                      <Copy className="w-2.5 h-2.5" />
-                      {copiedKey === 'ep' ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="font-mono font-bold text-slate-900">{settings.easypaisaNumber}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{settings.easypaisaTitle}</div>
-                </div>
-
-                {/* Bank */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
-                  <div className="flex items-center justify-between font-bold text-indigo-600">
-                    <span>Meezan Bank</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(settings.bankIban, 'bank')}
-                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5"
-                    >
-                      <Copy className="w-2.5 h-2.5" />
-                      {copiedKey === 'bank' ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="font-mono font-bold text-slate-900 text-[10px] truncate">
-                    {settings.bankIban}
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate">Earnzo Technologies</div>
-                </div>
-              </div>
-            </div>
+            {/* VIP Level Premium Receiving Account Card */}
+            <VipPaymentAccountCard
+              plan={selectedPlan}
+              selectedMethod={method}
+              onSelectMethod={setMethod}
+            />
 
             {/* Payment Submission Form */}
             <form onSubmit={handleSubmitPayment} className="space-y-4">

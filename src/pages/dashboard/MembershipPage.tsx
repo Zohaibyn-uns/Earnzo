@@ -20,6 +20,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { AlertBanner } from '../../components/ui/AlertBanner';
+import { VipPaymentAccountCard } from '../../components/payment/VipPaymentAccountCard';
 
 export const MembershipPage: React.FC = () => {
   const { plan, activePlan, hasActivePlan, membership, payments, submitPayment, approvePayment, refetchData } = usePlatform();
@@ -199,89 +200,12 @@ export const MembershipPage: React.FC = () => {
 
       {/* Payment Instructions & Submission Form */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left: Official Deposit Rails */}
-        <Card>
-          <CardContent className="p-6 sm:p-8 space-y-6">
-            <div className="space-y-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Step 1</span>
-              <h3 className="text-lg font-bold text-slate-900">Send Rs. {plan.price} To Official Channels</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Transfer exactly Rs. {plan.price} via JazzCash, Easypaisa, or 1Link Raast IBAN. Save the Transaction Reference (TRX ID).
-              </p>
-            </div>
-
-            {/* Official Accounts List */}
-            <div className="space-y-3">
-              {/* JazzCash Box */}
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span className="flex items-center gap-1.5 text-rose-600">
-                    <Smartphone className="w-4 h-4" />
-                    JazzCash Account
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard('03001234567', 'jc')}
-                    className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1"
-                  >
-                    <Copy className="w-3 h-3" />
-                    {copiedKey === 'jc' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Title: <strong>WatchEarn Official Operations</strong></span>
-                  <span className="font-mono font-bold text-slate-900">03001234567</span>
-                </div>
-              </div>
-
-              {/* Easypaisa Box */}
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span className="flex items-center gap-1.5 text-emerald-600">
-                    <Smartphone className="w-4 h-4" />
-                    Easypaisa Account
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard('03451234567', 'ep')}
-                    className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1"
-                  >
-                    <Copy className="w-3 h-3" />
-                    {copiedKey === 'ep' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Title: <strong>WatchEarn Payments</strong></span>
-                  <span className="font-mono font-bold text-slate-900">03451234567</span>
-                </div>
-              </div>
-
-              {/* Bank Transfer Box */}
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span className="flex items-center gap-1.5 text-indigo-600">
-                    <Building className="w-4 h-4" />
-                    Meezan Bank Ltd
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard('PK36MEZN0001234567890123', 'bank')}
-                    className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1"
-                  >
-                    <Copy className="w-3 h-3" />
-                    {copiedKey === 'bank' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                <div className="text-slate-600 space-y-0.5">
-                  <div>Title: <strong>WatchEarn Technologies Pvt Ltd</strong></div>
-                  <div className="font-mono font-bold text-slate-900 text-[11px] truncate">
-                    PK36MEZN0001234567890123
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Left: VIP Official Receiving Account Rails */}
+        <VipPaymentAccountCard
+          plan={plan}
+          selectedMethod={method}
+          onSelectMethod={setMethod}
+        />
 
         {/* Right: Payment Verification Form */}
         <Card>
